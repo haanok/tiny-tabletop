@@ -154,3 +154,29 @@ canvas { display: block; touch-action: none; }
   .hud-hearts { font-size: 18px; }
   #hint { display: none; }
 }
+
+/* ---------- Settings bar ---------- */
+#settings {
+  position: fixed; left: 14px; bottom: 14px; display: flex; gap: 6px; align-items: center;
+  padding: 5px; border-radius: 999px; background: var(--parchment); border: 2px solid var(--parchment-edge);
+  box-shadow: 0 4px 12px #0005;
+}
+.set-btn {
+  position: relative; width: 32px; height: 32px; border-radius: 50%; border: 0; cursor: pointer;
+  background: #fff8ea; font-size: 16px; line-height: 1; display: grid; place-items: center;
+}
+.set-btn:hover { background: #fff; }
+.set-btn.off { opacity: .55; }
+.set-btn.off::after {
+  content: ''; position: absolute; left: 6px; right: 6px; top: 50%; height: 2.5px;
+  background: #c2392b; transform: rotate(-45deg); border-radius: 2px;
+}
+.set-lang { display: flex; background: #efe2c4; border-radius: 999px; padding: 2px; }
+.set-lang button {
+  font: 700 12px var(--font); color: var(--ink-soft); border: 0; background: transparent;
+  padding: 6px 9px; border-radius: 999px; cursor: pointer;
+}
+.set-lang button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px #0003; }
+@media (max-width: 520px) {
+  #dialog { bottom: 64px; }
+}

@@ -3,7 +3,7 @@
  * show({ name, color, text, choices: [{ label, sub, disabled, onSelect }] })
  * Number keys 1-9 pick choices.
  */
-export function createDialog() {
+export function createDialog({ onChoose = () => {} } = {}) {
   const el = document.createElement('div');
   el.id = 'dialog';
   el.hidden = true;
@@ -30,7 +30,7 @@ export function createDialog() {
       b.type = 'button';
       b.disabled = !!c.disabled;
       b.innerHTML = `<span class="dlg-key">${i + 1}</span>${c.label}${c.sub ? `<small>${c.sub}</small>` : ''}`;
-      b.addEventListener('click', () => !c.disabled && c.onSelect());
+      b.addEventListener('click', () => { if (!c.disabled) { onChoose(); c.onSelect(); } });
       choicesEl.appendChild(b);
     });
   }
@@ -40,6 +40,7 @@ export function createDialog() {
     const n = Number(e.key);
     if (n >= 1 && n <= current.length && !current[n - 1].disabled) {
       e.preventDefault();
+      onChoose();
       current[n - 1].onSelect();
     }
   });

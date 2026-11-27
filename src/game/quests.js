@@ -1,29 +1,19 @@
 import { BOARDS, nextBoardToward } from '../world/boards.js';
 
+// Titles and step text live in i18n under quest.<id>.*
+
 /**
  * Quest definitions. Stages: none → active → ready → complete.
  * active: go to `target`; ready: return to `giver`.
  */
 export const QUESTS = {
   troll: {
-    title: 'The Bog Troll',
     giver: { board: 'thimblecross', npc: 'bramble' },
     target: { board: 'bogmire', npc: 'troll' },
-    steps: {
-      active: 'Defeat Grumblemaw in the Bogmire.',
-      ready: 'Return to Sergeant Bramble in Thimblecross.',
-      complete: 'Grumblemaw is beaten. Thimblecross is safe!',
-    },
   },
   lens: {
-    title: 'The Stolen Lens',
     giver: { board: 'gullhaven', npc: 'marla' },
     target: { board: 'shellshore', npc: 'crab' },
-    steps: {
-      active: 'Recover the lighthouse lens from Captain Pinch at Shellshore Cove.',
-      ready: 'Bring the lens back to Old Marla in Gullhaven.',
-      complete: 'The Gullhaven light shines again!',
-    },
   },
 };
 
@@ -42,7 +32,7 @@ export function routeHint(currentBoard, obj) {
   const next = nextBoardToward(currentBoard, obj.board);
   if (!next) return null;
   const exit = BOARDS[currentBoard].exits.find((e) => e.to === next);
-  return { next, exit, nextName: BOARDS[next].name, finalName: BOARDS[obj.board].name };
+  return { next, exit };
 }
 
 /** Pick the next quest to track automatically (e.g. after one completes). */

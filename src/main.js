@@ -39,6 +39,10 @@ import { createState, swordLevel, maxHp } from './game/state.js';
 import { objective, routeHint, autoTrack } from './game/quests.js';
 import { createTalk } from './game/talk.js';
 import { createEncounters, ENEMIES } from './game/encounter.js';
+import { createAudio } from './audio/audio.js';
+import { BOARD_SONG } from './audio/songs.js';
+import { createSettings } from './ui/settings.js';
+import { t, onLangChange } from './i18n/i18n.js';
 
 // ---------------- Renderer / scene ----------------
 const renderer = new WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -59,9 +63,10 @@ const { camera, controls } = createCamera(renderer.domElement);
 const fx = createPostFX(renderer, scene, camera);
 const table = createTable(scene);
 
+const audio = createAudio();
 const labels = createLabels(camera);
-const dice = createDice(scene, labels);
-const dialog = createDialog();
+const dice = createDice(scene, labels, (name, o) => audio.sfx(name, o));
+const dialog = createDialog({ onChoose: () => audio.sfx('select') });
 const banner = createBanner();
 const waypoint = createWaypoint(scene);
 const state = createState();
@@ -82,6 +87,8 @@ const ARROWS = { north: '↑', south: '↓', east: '→', west: '←' };
 const boards = new Map();
 const markers = new Map(); // npcId -> label
 const nameTags = new Map(); // npc -> label
+const exitLabels = []; // { label, to }
+const boardName = (id) => t(`board.${id}.name`);
 
 function getBoard(id) {
   if (boards.has(id)) return boards.get(id);
@@ -92,7 +99,7 @@ function getBoard(id) {
 
   for (const [npcId, npc] of b.npcs) {
     markers.set(npcId, labels.attach(npc.object, { y: NPC_TOP[npcId], className: 'marker' }));
-    const tag = labels.attach(npc.object, { y: NPC_TOP[npcId] - 0.3, className: 'nametag', html: npc.name });
+    const tag = labels.attach(npc.object, { y: NPC_TOP[npcId] - 0.3, className: 'nametag', html: t(`npc.${npcId}`) });
     tag.show(false);
     nameTags.set(npc, tag);
     const es = state.enemies[npcId];
@@ -107,7 +114,8 @@ function getBoard(id) {
     crab.setLens(state.quests.lens === 'none' || state.quests.lens === 'active');
   }
   for (const ex of b.exits) {
-    labels.attach(ex.anchor, { y: 0, className: 'exit-label', html: `${ARROWS[ex.side]} ${BOARDS[ex.to].name}` });
+    const label = labels.attach(ex.anchor, { y: 0, className: 'exit-label', html: `${ARROWS[ex.side]} ${boardName(ex.to)}` });
+    exitLabels.push({ label, ex });
   }
   return b;
 }
@@ -136,11 +144,13 @@ const hud = createHUD({
     if (state.potions <= 0 || state.hp >= maxHp(state)) return;
     state.potions -= 1;
     state.hp = Math.min(maxHp(state), state.hp + 2);
+    audio.sfx('potion');
     popupHero('+2 ♥', 'heal');
     changed();
   },
   onTrack(id) {
     state.tracked = state.tracked === id ? null : id;
+    audio.sfx('select');
     changed();
   },
 });
@@ -174,7 +184,7 @@ function changed() {
   boards.get('gullhaven')?.props.lighthouse?.userData.setLit(state.quests.lens === 'complete');
   refreshMarkers();
   updateWaypoint(true);
-  hud.render(state, { boardName: board.def.name, guidance });
+  hud.render(state, { boardName: boardName(board.id), guidance });
 }
 
 const ctx = {
@@ -185,6 +195,9 @@ const ctx = {
   changed,
   popupHero,
   popupNpc,
+  sfx: (name, o) => audio.sfx(name, o),
+  /** music('battle') plays a theme; music(null) returns to the board's song; { silent } stops music. */
+  music: (name, o) => audio.music(o?.silent ? null : name ?? BOARD_SONG[board.id]),
   lock: (v) => { locked = v; },
   enemy: (id) => board.npcs.get(id),
   groundY: (p) => board.worldPos(...Object.values(board.cellFromWorld(p))).y,
@@ -206,6 +219,7 @@ const talk = createTalk(ctx);
 const encounters = createEncounters(ctx);
 
 function interact(occ) {
+  welcomeOpen = false;
   hero.faceTowards(occ.npc.object.getWorldPosition(v3));
   occ.npc.faceTowards(hero.object.position.clone().sub(board.group.position));
   if (ENEMIES[occ.id]) encounters.start(occ.id);
@@ -231,7 +245,7 @@ function goTo(gx, gz) {
     hero.moveAlong(toSteps(path), () => interact(occ));
     return;
   }
-  if (board.isBlocked(gx, gz)) return;
+  if (board.isBlocked(gx, gz)) { audio.sfx('bump'); return; }
   const path = findPath(hero.cell, target, (x, z) => x === gx && z === gz, blockedFor(target));
   if (!path) return;
   dialog.hide();
@@ -239,8 +253,10 @@ function goTo(gx, gz) {
 }
 
 hero.onStep = (cell) => {
+  audio.sfx('step');
   const coin = board.collectCoin(cell.gx, cell.gz);
   if (coin) {
+    audio.sfx('coin');
     state.gold += coin;
     popupHero(`+${coin}g`, 'gold');
     changed();
@@ -280,14 +296,17 @@ async function switchBoard(to, arrival, dir) {
   const startOff = finalOff.clone().addScaledVector(dir, span);
   to.group.position.copy(startOff);
   to.group.visible = true;
-  banner.show(to.def.name, to.def.subtitle);
+  banner.show(boardName(to.id), t(`board.${to.id}.subtitle`), t('ui.entering'));
+  audio.music(BOARD_SONG[to.id]);
+  audio.sfx('lift');
 
   const fromStart = from.group.position.clone();
   const lift = 1.0;
-  await tween(0.3, (t) => { hero.object.position.y = P.y + t * lift; }, ease.outCubic);
-  await tween(1.2, (t) => {
-    from.group.position.copy(fromStart).addScaledVector(dir, -span * t);
-    to.group.position.lerpVectors(startOff, finalOff, t);
+  await tween(0.3, (k) => { hero.object.position.y = P.y + k * lift; }, ease.outCubic);
+  audio.sfx('whoosh');
+  await tween(1.2, (k) => {
+    from.group.position.copy(fromStart).addScaledVector(dir, -span * k);
+    to.group.position.lerpVectors(startOff, finalOff, k);
   }, ease.inOut);
   from.group.visible = false;
 
@@ -295,9 +314,10 @@ async function switchBoard(to, arrival, dir) {
   state.board = to.id;
   const ground = to.worldPos(arrival.gx, arrival.gz);
   hero.place(arrival, ground.clone().setY(ground.y + lift));
-  await tween(0.28, (t) => { hero.object.position.y = ground.y + (1 - t * t) * lift; });
+  await tween(0.28, (k) => { hero.object.position.y = ground.y + (1 - k * k) * lift; });
   hero.object.position.y = ground.y;
   hero.land();
+  audio.sfx('land');
   table.recenter(finalOff.x + to.W / 2, finalOff.z + to.H / 2);
 
   transitioning = false;
@@ -323,7 +343,7 @@ function updateWaypoint(force = false) {
     const path = findPath(hero.cell, goal, (x, z) => adjacent({ gx: x, gz: z }, goal), blockedFor(null)) ?? [];
     const pts = [hero.cell, ...path].map((c) => board.worldPos(c.gx, c.gz));
     waypoint.set(pts, board.worldPos(goal.gx, goal.gz), NPC_TOP[obj.npc] + 0.55);
-    guidance = `Find ${npc.name} here`;
+    guidance = t('ui.find', { name: t(`npc.${obj.npc}`) });
   } else {
     const hint = routeHint(board.id, obj);
     if (hint) {
@@ -334,10 +354,11 @@ function updateWaypoint(force = false) {
       const path = findPath(hero.cell, goal, (x, z) => x === goal.gx && z === goal.gz, blockedFor(goal)) ?? [];
       const pts = [hero.cell, ...path].map((c) => board.worldPos(c.gx, c.gz));
       waypoint.set(pts, board.worldPos(goal.gx, goal.gz), 1.2);
-      guidance = `Take the ${exit.side} road to ${hint.nextName}${hint.next !== obj.board ? `, then on to ${hint.finalName}` : ''}`;
+      guidance = t('ui.route', { side: t(`ui.sides.${exit.side}`), next: boardName(hint.next) }) +
+        (hint.next !== obj.board ? t('ui.routeOn', { final: boardName(obj.board) }) : '');
     }
   }
-  if (guidance !== prevGuidance && !force) hud.render(state, { boardName: board.def.name, guidance });
+  if (guidance !== prevGuidance && !force) hud.render(state, { boardName: boardName(board.id), guidance });
 }
 
 // ---------------- Pointer ----------------
@@ -414,16 +435,16 @@ function keyboardStep(dt) {
   const right = { x: -fwd.z, z: fwd.x };
   const dir = held.has('f') ? fwd : held.has('b') ? { x: -fwd.x, z: -fwd.z }
     : held.has('r') ? right : { x: -right.x, z: -right.z };
-  const t = { gx: hero.cell.gx + dir.x, gz: hero.cell.gz + dir.z };
-  const occ = board.occupantAt(t.gx, t.gz);
+  const next = { gx: hero.cell.gx + dir.x, gz: hero.cell.gz + dir.z };
+  const occ = board.occupantAt(next.gx, next.gz);
   if (occ?.npc) {
     held.clear();
     interact(occ);
-  } else if (board.isBlocked(t.gx, t.gz)) {
-    if (bumpCooldown <= 0) { hero.bump(dir); bumpCooldown = 0.3; }
+  } else if (board.isBlocked(next.gx, next.gz)) {
+    if (bumpCooldown <= 0) { hero.bump(dir); audio.sfx('bump'); bumpCooldown = 0.3; }
   } else {
     dialog.hide();
-    hero.moveAlong(toSteps([t]));
+    hero.moveAlong(toSteps([next]));
   }
 }
 
@@ -439,17 +460,42 @@ window.addEventListener('resize', () => {
 
 // ---------------- Start ----------------
 createDebugUI({ fx, hero });
+createSettings(audio);
 table.recenter(board.W / 2, board.H / 2);
 changed();
-banner.show(board.def.name, board.def.subtitle);
-dialog.show({
-  name: 'Welcome, adventurer',
-  color: '#c8962a',
-  text: 'Click a tile or use <b>WASD</b> to hop around, and click a character to talk. ' +
-    'Glowing arrows at the board\'s edge lead to <b>new boards</b>.<br>' +
-    'Look for a <b>!</b> to find quests. Once you accept one, a <b>golden trail</b> guides you.',
-  choices: [{ label: "Let's go!", onSelect: () => dialog.hide() }],
-});
+banner.show(boardName(board.id), t(`board.${board.id}.subtitle`), t('ui.entering'));
+audio.music(BOARD_SONG[board.id]);
+
+const hint = document.getElementById('hint');
+function showWelcome() {
+  dialog.show({
+    name: t('ui.welcomeTitle'),
+    color: '#c8962a',
+    text: t('ui.welcomeText'),
+    choices: [{ label: t('ui.welcomeGo'), onSelect: () => { welcomeOpen = false; dialog.hide(); } }],
+  });
+}
+let welcomeOpen = true;
+showWelcome();
+
+// Browsers only allow audio after a user gesture.
+const unlockAudio = () => audio.unlock();
+window.addEventListener('pointerdown', unlockAudio);
+window.addEventListener('keydown', unlockAudio);
+
+function applyLanguage() {
+  hint.textContent = t('ui.hint');
+  for (const [npc, tag] of nameTags) tag.set(t(`npc.${npc.id}`));
+  for (const { label, ex } of exitLabels) label.set(`${ARROWS[ex.side]} ${boardName(ex.to)}`);
+  changed();
+  if (dialog.isOpen && !locked) {
+    if (welcomeOpen) showWelcome();
+    else dialog.hide();
+  }
+}
+onLangChange(applyLanguage);
+hint.textContent = t('ui.hint');
+
 
 const clock = new Clock();
 const focusPoint = new Vector3();

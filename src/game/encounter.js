@@ -1,121 +1,114 @@
 import { attackBonus, sneakBonus, maxHp } from './state.js';
 import { wait } from '../core/anim.js';
+import { t } from '../i18n/i18n.js';
 
+/** Mechanics per enemy. All text lives in i18n under enemy.<id>.* */
 export const ENEMIES = {
   troll: {
-    name: 'Grumblemaw, the Bog Troll',
-    short: 'Grumblemaw',
     color: '#3f6b3a',
     dc: 14,
     maxHp: 3,
     quest: 'troll',
     reward: 25,
+    cry: 'roar',
     respawn: { board: 'thimblecross', cell: [8, 8] },
-    intro: '<i>The mossy boulder shudders, opens two glowing eyes and lets out a rumbling yawn.</i><br>' +
-      '"<b>GRRRUMBLE.</b> Tiny thing come to Grumblemaw\'s bog? Tiny thing look <b>crunchy</b>."',
-    idle: 'Grumblemaw raises its spiked club. Your move!',
-    hit: ['Your blade finds a gap in the moss!', 'A solid thwack right on the kneecap!'],
-    crit: 'A critical blow! Grumblemaw staggers!',
-    miss: "Grumblemaw's club bonks you!",
-    flee: '"Hrrm. Tiny thing runs. Grumblemaw nap again." <i>The troll settles back into the mud.</i>',
-    victory: 'Grumblemaw wobbles... totters... and topples into the bog with an enormous SPLORCH!',
-    loot: 'The bog falls silent. Among the mud you find <b>25 gold</b> and half a cheese wagon. Sergeant Bramble will want to hear about this!',
-    after: 'Only bubbles and the croak of frogs remain where Grumblemaw once stood.',
   },
   crab: {
-    name: 'Captain Pinch',
-    short: 'Captain Pinch',
     color: '#c0452e',
     dc: 13,
     maxHp: 4,
     quest: 'lens',
     reward: 15,
+    cry: 'snap',
     respawn: { board: 'gullhaven', cell: [7, 6] },
-    intro: '<i>A barrel the size of a rowboat sits in the sand, snoring. Two eye stalks droop over the rim. ' +
-      'Wedged on top, the lighthouse lens glitters.</i>',
-    idle: 'Captain Pinch clacks his claws. "Yarr. Nobody touches me treasure!"',
-    hit: ['Clonk! Right on the shell!', 'You whack a claw. He drops into the sand with a yelp!'],
-    crit: 'A perfect strike between the shell plates!',
-    miss: 'SNIP! Captain Pinch pinches your toes!',
-    flee: '"Arr, and stay out!" <i>The crab burrows back into his barrel.</i>',
-    victory: 'Captain Pinch flips onto his back, legs wiggling, and the lens rolls free into the sand!',
-    loot: 'You grab the <b>lighthouse lens</b> and <b>15 gold</b> worth of shiny buttons from the barrel. Old Marla will be thrilled!',
-    after: 'The cove is quiet. Just waves, gulls and an empty barrel.',
-    sneak: {
-      dc: 15,
-      success: 'You tiptoe across the sand... ease the lens loose... and slip away. Captain Pinch smacks his lips and snores on. <b>You have the lens!</b>',
-      fail: '<i>Crunch.</i> You step on a shell. Two eye stalks snap upright. "<b>THIEF!</b>"',
-      sleeping: 'Captain Pinch is still snoring happily, dreaming of buttons. Best not wake him.',
-    },
+    sneak: { dc: 15 },
   },
 };
 
 const hearts = (n, max, cls = '') =>
   Array.from({ length: max }, (_, i) => `<span class="heart ${cls} ${i < n ? 'full' : 'empty'}">♥</span>`).join('');
 
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
-
 /**
  * Dice-driven encounters.
- * ctx: { state, dialog, hero, dice, changed, popupHero, popupNpc, lock, enemy(id), groundY, respawn(board, cell), onEnemyDefeated(id) }
+ * ctx: { state, dialog, hero, dice, changed, popupHero, popupNpc, lock, enemy(id), groundY,
+ *        respawn(board, cell), onEnemyDefeated(id), sfx(name), music(name|null) }
  */
 export function createEncounters(ctx) {
   const { state, dialog, hero, dice } = ctx;
+  const tx = (id, k, p) => t(`enemy.${id}.${k}`, p);
+  const header = (id) => ({ name: t(`npc.${id}`), color: ENEMIES[id].color });
 
   function start(id) {
     const E = ENEMIES[id];
     const es = state.enemies[id];
     const q = state.quests[E.quest];
-    if (es.defeated) return info(E, E.after);
-    if (es.sneaked || q === 'ready' || q === 'complete') return info(E, E.sneak?.sleeping ?? E.after);
+    if (es.defeated) return info(id, tx(id, 'after'));
+    if (es.sneaked || q === 'ready' || q === 'complete') {
+      if (E.sneak) ctx.sfx('snore');
+      return info(id, E.sneak ? tx(id, 'sleeping') : tx(id, 'after'));
+    }
 
-    const enemy = ctx.enemy(id);
     ctx.lock(true);
+    if (E.sneak) ctx.sfx('snore');
+    else { ctx.sfx(E.cry); ctx.music('battle'); }
     const choices = [];
     if (E.sneak) {
-      choices.push({ label: 'Sneak up and take the lens', sub: `d20 + ${sneakBonus(state)} sneak vs DC ${E.sneak.dc}`, onSelect: () => sneak(id) });
+      choices.push({ label: t('fight.sneakChoice'), sub: t('fight.sneakSub', { bonus: sneakBonus(state), dc: E.sneak.dc }), onSelect: () => sneak(id) });
     }
-    choices.push({ label: 'Fight!', sub: `d20 + ${attackBonus(state)} vs DC ${E.dc}`, onSelect: () => { enemy.setAsleep?.(false); round(id); } });
-    choices.push({ label: 'Back away slowly', onSelect: () => flee(id) });
-    show(E, E.intro, choices, id);
+    choices.push({
+      label: t('fight.fightChoice'), sub: t('fight.fightSub', { bonus: attackBonus(state), dc: E.dc }),
+      onSelect: () => { wake(id); round(id); },
+    });
+    choices.push({ label: t('fight.backAway'), onSelect: () => flee(id) });
+    show(id, tx(id, 'intro'), choices);
   }
 
-  function info(E, text) {
-    dialog.show({ name: E.name, color: E.color, text, choices: [{ label: 'Leave', onSelect: () => dialog.hide() }] });
+  function wake(id) {
+    const enemy = ctx.enemy(id);
+    if (enemy.setAsleep) {
+      enemy.setAsleep(false);
+      ctx.sfx(ENEMIES[id].cry);
+    }
+    ctx.music('battle');
+  }
+
+  function info(id, text) {
+    dialog.show({ ...header(id), text, choices: [{ label: t('common.leave'), onSelect: () => dialog.hide() }] });
   }
 
   function status(id) {
-    const E = ENEMIES[id];
     return `<div class="fight-status">
-      <div><small>${E.short}</small>${hearts(state.enemies[id].hp, E.maxHp, 'boss')}</div>
-      <div><small>You</small>${hearts(state.hp, maxHp(state))}</div>
+      <div><small>${tx(id, 'short')}</small>${hearts(state.enemies[id].hp, ENEMIES[id].maxHp, 'boss')}</div>
+      <div><small>${t('fight.you')}</small>${hearts(state.hp, maxHp(state))}</div>
     </div>`;
   }
 
-  function show(E, text, choices, id) {
-    dialog.show({ name: E.name, color: E.color, text: text + status(id), choices });
-  }
+  const show = (id, text, choices = []) => dialog.show({ ...header(id), text: text + status(id), choices });
 
-  async function rollCheck(id, bonus, dc, label) {
-    show(ENEMIES[id], `You roll for ${label}... <span class="muted">(need ${Math.max(2, dc - bonus)}+ on the die)</span>`, [], id);
+  async function rollCheck(id, bonus, dc, what) {
+    show(id, t('fight.rollFor', { what: t(what === 'sneak' ? 'fight.whatSneak' : 'fight.whatAttack'), need: Math.max(2, dc - bonus) }));
+    ctx.sfx('diceShake');
     const enemy = ctx.enemy(id);
-    const mid = hero.object.position.clone().lerp(enemy.object.position, 0.5);
+    const mid = hero.object.position.clone().lerp(enemy.object.getWorldPosition(enemy.object.position.clone()), 0.5);
     return dice.roll(mid, ctx.groundY(mid), (n) =>
       n === 20 ? 'crit' : n === 1 ? 'fumble' : n + bonus >= dc ? 'success' : 'fail');
   }
 
-  /** Offer a clover reroll on failure. Calls next(r, rerolled). */
+  const rolledLine = (r, bonus, dc) => t('fight.rolled', { r, bonus, total: r + bonus, dc });
+
+  /** On a failed roll, offer a clover reroll if the hero has one. */
   function cloverOr(id, line, missText, retry, accept) {
     if (state.clovers <= 0) return accept();
-    show(ENEMIES[id], `${line} <b class="bad">${missText}</b> Your lucky clover twitches in your pocket...`, [
-      { label: 'Use a Lucky Clover', sub: `Reroll (${state.clovers} left)`, onSelect: () => {
+    show(id, `${line} <b class="bad">${missText}</b> ${t('fight.clover')}`, [
+      { label: t('fight.useClover'), sub: t('fight.useCloverSub', { n: state.clovers }), onSelect: () => {
         state.clovers -= 1;
+        ctx.sfx('luck');
         ctx.changed();
-        ctx.popupHero('🍀 Reroll!', 'luck');
+        ctx.popupHero(t('ui.reroll'), 'luck');
         retry();
       } },
-      { label: 'Accept fate', onSelect: accept },
-    ], id);
+      { label: t('fight.acceptFate'), onSelect: accept },
+    ]);
   }
 
   // ---------------- Sneak ----------------
@@ -123,11 +116,10 @@ export function createEncounters(ctx) {
     const E = ENEMIES[id];
     const bonus = sneakBonus(state);
     const r = await rollCheck(id, bonus, E.sneak.dc, 'sneak');
-    const total = r + bonus;
-    const ok = r === 20 || (r !== 1 && total >= E.sneak.dc);
-    const line = `You rolled <b>${r}</b> + ${bonus} = <b>${total}</b> vs DC ${E.sneak.dc}.`;
+    const ok = r === 20 || (r !== 1 && r + bonus >= E.sneak.dc);
+    const line = rolledLine(r, bonus, E.sneak.dc);
     if (ok) return sneakSuccess(id, line);
-    cloverOr(id, line, r === 1 ? 'A natural 1!' : 'Not quiet enough!', () => sneak(id), () => sneakFail(id, line));
+    cloverOr(id, line, t(r === 1 ? 'fight.nat1' : 'fight.notQuiet'), () => sneak(id), () => sneakFail(id, line));
   }
 
   function sneakSuccess(id, line) {
@@ -135,104 +127,106 @@ export function createEncounters(ctx) {
     state.enemies[id].sneaked = true;
     state.quests[E.quest] = 'ready';
     ctx.enemy(id).setLens?.(false);
+    ctx.sfx('sneak');
     ctx.changed();
-    ctx.popupHero('Lens recovered!', 'gold');
+    ctx.popupHero(t('ui.lensRecovered'), 'gold');
     ctx.lock(false);
-    dialog.show({ name: 'Sneaky!', color: '#3e8a6a', text: `${line}<br>${E.sneak.success}`, choices: [{ label: 'Tiptoe away', onSelect: () => dialog.hide() }] });
+    dialog.show({ name: t('fight.sneaky'), color: '#3e8a6a', text: `${line}<br>${tx(id, 'sneakSuccess')}`, choices: [{ label: t('fight.tiptoe'), onSelect: () => dialog.hide() }] });
   }
 
   async function sneakFail(id, line) {
-    const E = ENEMIES[id];
     const enemy = ctx.enemy(id);
-    enemy.setAsleep?.(false);
-    show(E, `${line}<br>${E.sneak.fail}`, [], id);
+    wake(id);
+    show(id, `${line}<br>${tx(id, 'sneakFail')}`);
     await wait(0.4);
+    ctx.sfx('swing');
     await enemy.attack();
-    if (await hurtHero(id)) return;
-    round(id, `${line} He got a free pinch in, but now it\'s a fair fight!`);
+    if (await hurtHero()) return defeat(id);
+    round(id, t('fight.freePinch', { line }));
   }
 
   // ---------------- Fight ----------------
   function round(id, msg) {
     const E = ENEMIES[id];
     const bonus = attackBonus(state);
-    const choices = [{ label: 'Attack', sub: `Roll d20 + ${bonus} vs DC ${E.dc}`, onSelect: () => attack(id) }];
+    const choices = [{ label: t('fight.attack'), sub: t('fight.attackSub', { bonus, dc: E.dc }), onSelect: () => attack(id) }];
     if (state.potions > 0 && state.hp < maxHp(state)) {
-      choices.push({ label: 'Drink a potion', sub: `+2 hearts (${state.potions} left)`, onSelect: () => drink(id) });
+      choices.push({ label: t('fight.drink'), sub: t('fight.drinkSub', { n: state.potions }), onSelect: () => drink(id) });
     }
-    choices.push({ label: 'Flee', sub: `${E.short} recovers if you leave`, onSelect: () => flee(id) });
-    show(E, msg || E.idle, choices, id);
+    choices.push({ label: t('fight.flee'), sub: t('fight.fleeSub', { name: tx(id, 'short') }), onSelect: () => flee(id) });
+    show(id, msg || tx(id, 'idle'), choices);
   }
 
   async function attack(id) {
     const E = ENEMIES[id];
     const bonus = attackBonus(state);
     const r = await rollCheck(id, bonus, E.dc, 'attack');
-    const total = r + bonus;
-    const hit = r === 20 || (r !== 1 && total >= E.dc);
-    const line = `You rolled <b>${r}</b> + ${bonus} = <b>${total}</b> vs DC ${E.dc}.`;
+    const hit = r === 20 || (r !== 1 && r + bonus >= E.dc);
+    const line = rolledLine(r, bonus, E.dc);
     if (hit) return exchange(id, true, r, line);
-    cloverOr(id, line, r === 1 ? 'A natural 1!' : 'A miss!', () => attack(id), () => exchange(id, false, r, line));
+    cloverOr(id, line, t(r === 1 ? 'fight.nat1' : 'fight.miss'), () => attack(id), () => exchange(id, false, r, line));
   }
 
   async function exchange(id, hit, r, line) {
-    const E = ENEMIES[id];
     const enemy = ctx.enemy(id);
     const es = state.enemies[id];
     if (hit) {
       const dmg = r === 20 ? 2 : 1;
-      show(E, `${line} <b class="good">${r === 20 ? 'CRITICAL HIT!' : 'Hit!'}</b>`, [], id);
+      show(id, `${line} <b class="good">${t(r === 20 ? 'fight.critHit' : 'fight.hit')}</b>`);
+      ctx.sfx('swing');
       await hero.attack();
+      ctx.sfx('hit');
       enemy.hit();
       es.hp = Math.max(0, es.hp - dmg);
       ctx.popupNpc(enemy, r === 20 ? '-2 ♥ CRIT!' : '-1 ♥', 'dmg');
       ctx.changed();
       await wait(0.5);
       if (es.hp <= 0) return victory(id);
-      round(id, `${line} <b class="good">${r === 20 ? E.crit : pick(E.hit)}</b>`);
+      round(id, `${line} <b class="good">${r === 20 ? tx(id, 'crit') : tx(id, 'hit')}</b>`);
     } else {
-      show(E, `${line} <b class="bad">${r === 1 ? 'Natural 1. You trip over your own cape!' : 'Miss!'}</b>`, [], id);
+      show(id, `${line} <b class="bad">${t(r === 1 ? 'fight.fumble' : 'fight.missShort')}</b>`);
+      ctx.sfx(ENEMIES[id].cry === 'snap' ? 'snap' : 'swing');
       await enemy.attack();
-      if (await hurtHero(id)) return;
-      round(id, `${line} <b class="bad">${E.miss}</b>`);
+      if (await hurtHero()) return defeat(id);
+      round(id, `${line} <b class="bad">${tx(id, 'miss')}</b>`);
     }
   }
 
-  /** Apply one point of damage to the hero; returns true if knocked out. */
-  async function hurtHero(id) {
+  /** One point of damage to the hero; returns true if knocked out. */
+  async function hurtHero() {
+    ctx.sfx('hurt');
     hero.hit();
     state.hp = Math.max(0, state.hp - 1);
     ctx.popupHero('-1 ♥', 'dmg');
     ctx.changed();
     await wait(0.5);
-    if (state.hp <= 0) {
-      await defeat(id);
-      return true;
-    }
-    return false;
+    return state.hp <= 0;
   }
 
   function drink(id) {
     state.potions -= 1;
     state.hp = Math.min(maxHp(state), state.hp + 2);
+    ctx.sfx('potion');
     ctx.changed();
     ctx.popupHero('+2 ♥', 'heal');
-    round(id, 'You gulp down the potion. It tastes like strawberries and courage.');
+    round(id, t('fight.drank'));
   }
 
   function flee(id) {
-    const E = ENEMIES[id];
-    state.enemies[id].hp = E.maxHp;
+    state.enemies[id].hp = ENEMIES[id].maxHp;
     ctx.enemy(id).setAsleep?.(true);
+    ctx.music(null);
     ctx.changed();
     ctx.lock(false);
-    info(E, E.flee);
+    info(id, tx(id, 'flee'));
   }
 
   async function victory(id) {
     const E = ENEMIES[id];
-    show(E, `<b class="good">${E.victory}</b>`, [], id);
+    show(id, `<b class="good">${tx(id, 'victory')}</b>`);
+    ctx.music(null, { silent: true });
     await ctx.enemy(id).defeat();
+    ctx.sfx('victory');
     state.enemies[id].defeated = true;
     ctx.onEnemyDefeated(id);
     state.gold += E.reward;
@@ -240,13 +234,17 @@ export function createEncounters(ctx) {
     ctx.changed();
     ctx.popupHero(`+${E.reward}g`, 'gold');
     ctx.lock(false);
-    dialog.show({ name: 'Victory!', color: '#c8962a', text: E.loot, choices: [{ label: 'Hooray!', onSelect: () => dialog.hide() }] });
+    dialog.show({ name: t('fight.victory'), color: '#c8962a', text: tx(id, 'loot'), choices: [{ label: t('fight.hooray'), onSelect: () => dialog.hide() }] });
+    await wait(2.2);
+    ctx.music(null);
   }
 
   async function defeat(id) {
     const E = ENEMIES[id];
-    show(E, '<b class="bad">Everything goes wobbly and dark...</b>', [], id);
-    await wait(0.8);
+    show(id, `<b class="bad">${t('fight.wobbly')}</b>`);
+    ctx.music(null, { silent: true });
+    ctx.sfx('defeat');
+    await wait(1.2);
     const lost = Math.floor(state.gold / 2);
     state.gold -= lost;
     state.hp = maxHp(state);
@@ -257,10 +255,10 @@ export function createEncounters(ctx) {
     await ctx.respawn(E.respawn.board, { gx: E.respawn.cell[0], gz: E.respawn.cell[1] });
     ctx.lock(false);
     dialog.show({
-      name: 'Knocked out!',
+      name: t('fight.knockedOut'),
       color: '#555',
-      text: `You wake up with a bump on your head${lost ? ` and <b>${lost} gold</b> missing from your purse` : ''}. Maybe visit a shop before trying again?`,
-      choices: [{ label: 'Ouch', onSelect: () => dialog.hide() }],
+      text: t('fight.wakeUp', { lost: lost ? t('fight.lostGold', { n: lost }) : '' }),
+      choices: [{ label: t('fight.ouch'), onSelect: () => dialog.hide() }],
     });
   }
 

@@ -6,7 +6,8 @@ export function createBanner() {
   document.body.appendChild(el);
   let timer;
   return {
-    show(title, sub) {
+    show(title, sub, small = 'Entering') {
+      el.querySelector('.bn-small').textContent = small;
       el.querySelector('.bn-title').textContent = title;
       el.querySelector('.bn-sub').textContent = sub;
       el.classList.remove('show');

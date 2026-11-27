@@ -6,7 +6,7 @@ import { wait } from '../core/anim.js';
  * A chunky 3D d20 that drops, bounces and settles, then shows its number.
  * roll(at, groundY, judge?) resolves with the result once the number is shown.
  */
-export function createDice(scene, labels) {
+export function createDice(scene, labels, sfx = () => {}) {
   const R = 0.19;
   const die = new Group();
   const geo = new IcosahedronGeometry(R, 0);
@@ -37,6 +37,7 @@ export function createDice(scene, labels) {
       s.vel.z *= 0.6;
       s.spin.multiplyScalar(0.55);
       s.bounces++;
+      sfx('diceBounce', { strength: Math.min(1, Math.abs(s.vel.y) / 4) });
       if (s.bounces >= 4 || Math.abs(s.vel.y) < 0.6) {
         sim = null;
         s.done();
@@ -60,6 +61,7 @@ export function createDice(scene, labels) {
       };
     });
     const cls = judge(result);
+    sfx(cls || 'success');
     tag = labels.attach(die, { y: 0.32, className: `dice-result ${cls}`, html: `${result}` });
     await wait(0.9);
     const t = tag;
