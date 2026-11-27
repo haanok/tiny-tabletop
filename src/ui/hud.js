@@ -41,7 +41,8 @@ export function createHUD({ onDrink, onTrack }) {
         <span title="${t('ui.attack')}">⚔️ +${attackBonus(s)}</span>
         <span title="${t('ui.sneak')}">🥾 +${sneakBonus(s)}</span>
         <span title="${t('ui.potions')}">🧪 ${s.potions}</span>
-        <span title="${t('ui.clovers')}">🍀 ${s.clovers}</span>`;
+        <span title="${t('ui.clovers')}">🍀 ${s.clovers}</span>
+        ${s.oil ? `<span title="${t('ui.oil')}">🔥 ${s.oil}</span>` : ''}`;
       $('.hud-drink').hidden = !(s.potions > 0 && s.hp < mx);
 
       const known = Object.keys(QUESTS).map((id) => [id]).filter(([id]) => s.quests[id] !== 'none');

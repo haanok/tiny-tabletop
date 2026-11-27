@@ -11,6 +11,7 @@ export default {
     sneak: 'Sneak bonus',
     potions: 'Healing potions',
     clovers: 'Lucky clovers',
+    oil: 'Bane oil (+2 attack for one fight)',
     music: 'Music',
     sfx: 'Sound effects',
     language: 'Language',
@@ -65,6 +66,7 @@ export default {
     whetstone: { name: 'Whetstone', desc: '+1 to attack rolls' },
     tinPlate: { name: 'Tin Plate Armour', desc: '+1 max heart' },
     potion: { name: 'Healing Potion', desc: 'Restore 2 hearts (use any time)' },
+    oil: { name: 'Bane Oil', desc: '+2 to attack rolls for your next fight' },
     clover: { name: 'Lucky Clover', desc: 'Reroll one failed check' },
     narwhal: { name: 'Narwhal Blade', desc: '+2 to attack rolls' },
     coralMail: { name: 'Coral Mail', desc: '+1 max heart' },
@@ -85,7 +87,7 @@ export default {
     pip: {
       greeting: 'Psst! Shiny things for shiny coins! Pip has wares from all four corners of the table.',
       gossip: 'Pip\'s cousin Bess runs a stall in <b>Gullhaven</b>, east along the road. Fancier blades, smellier stall. ' +
-        'And the troll in the bog? Slow, but hits hard. A sharp edge and a lucky clover make all the difference!',
+        'And the troll in the bog? Slow, but hits hard. Nobody beats it with a butter knife. Sharpen your blade, buy armour, and bring potions and Bane Oil!',
     },
     bess: {
       greeting: 'Ahoy, landlubber! Fresh fish, finer steel and boots that don\'t squeak. What\'ll it be?',
@@ -108,7 +110,7 @@ export default {
       'Things grew there that shouldn\'t: glowing mushrooms, angry frogs, and worst of all <b>Grumblemaw</b>, a troll who was once a mossy boulder until the tea woke it up.',
     tips: 'Every blow is a gamble. Roll the <b>d20</b> and add your attack bonus (yours is <b>+{bonus}</b>). ' +
       'Beat <b>{dc}</b> to land a hit; miss and it clubs you back. A natural <b>20</b> hits twice as hard, a natural <b>1</b> always misses. ' +
-      'Three good hits topples it. Follow the glowing trail; it\'ll lead you right to its lair.',
+      'It takes <b>{hp}</b> good hits to topple it, and a natural 1 means a crushing blow. Don\'t go in with bare steel and three hearts. Follow the glowing trail; it\'ll lead you right to its lair.',
     readyText: 'By my mustache... you actually <b>did it</b>! The whole square heard Grumblemaw\'s groan. Thimblecross owes you a debt.',
     claim: 'Claim your reward',
     claimSub: '+30 gold and a title',
@@ -118,8 +120,8 @@ export default {
     thanks: 'Thank you, Sergeant',
     greetNone: 'Halt! Who goes... oh. An adventurer, by the looks of that cape. We could use one of those.',
     greetActive: 'Grumblemaw still snores in the bog up north. Your attack bonus is <b>+{bonus}</b>. {comment}',
-    lowBonus: 'Bit low, if you ask me.',
-    goodBonus: 'Looking sharp!',
+    lowBonus: 'That won\'t dent troll hide. Go see Pip, or Bess in Gullhaven, before you try.',
+    goodBonus: 'Now that\'s a blade that bites. Stock up on potions and go.',
     greetComplete: 'Hail, Bogbane! The road north is quiet now. Nothing left out there but frogs and mushrooms.',
     askPlace: 'What is this place?',
     askBog: 'Tell me about the bog.',
@@ -220,7 +222,7 @@ export default {
     fleeSub: '{name} recovers if you leave',
     critHit: 'CRITICAL HIT!',
     hit: 'Hit!',
-    fumble: 'Natural 1. You trip over your own cape!',
+    fumble: 'Natural 1. You stumble, and it lands a crushing blow!',
     missShort: 'Miss!',
     drank: 'You gulp down the potion. It tastes like strawberries and courage.',
     victory: 'Victory!',
@@ -230,5 +232,9 @@ export default {
     wakeUp: 'You wake up with a bump on your head{lost}. Maybe visit a shop before trying again?',
     lostGold: ' and <b>{n} gold</b> missing from your purse',
     ouch: 'Ouch',
+    odds: 'Your odds in a fight: <b class="{cls}">{pct}%</b> ({verdict})',
+    verdict: { doomed: 'hopeless', grim: 'grim', risky: 'risky', even: 'fair', good: 'favourable' },
+    gearUp: 'You feel badly outmatched. Better armour, a sharper blade and a few potions would make all the difference.',
+    oilApplied: 'You rub Bane Oil along your blade. It hisses and glows (+2 this fight).',
   },
 };

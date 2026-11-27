@@ -9,12 +9,12 @@ function woodTexture() {
   c.width = 512;
   c.height = 512;
   const g = c.getContext('2d');
-  g.fillStyle = '#7a4e2e';
+  g.fillStyle = '#3a2516';
   g.fillRect(0, 0, 512, 512);
   const rand = seededRandom(3);
   for (let i = 0; i < 160; i++) {
     const y = rand() * 512;
-    g.strokeStyle = `rgba(${rand() < 0.5 ? '50,28,14' : '160,108,66'},${0.15 + rand() * 0.25})`;
+    g.strokeStyle = `rgba(${rand() < 0.5 ? '18,10,5' : '95,62,36'},${0.15 + rand() * 0.25})`;
     g.lineWidth = 1 + rand() * 4;
     g.beginPath();
     g.moveTo(0, y);

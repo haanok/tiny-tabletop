@@ -16,6 +16,9 @@ export function createDebugUI({ fx, hero }) {
   grade.add(fx.params, 'saturation', 0, 2, 0.01);
   grade.add(fx.params, 'contrast', 0.6, 1.6, 0.01);
   grade.add(fx.params, 'vignette', 0, 1, 0.01);
+  grade.add(fx.params, 'tint', 0, 1, 0.01);
+  grade.add(fx.params, 'grain', 0, 0.15, 0.005);
+  grade.add(fx.params, 'bloom', 0, 2, 0.01);
   grade.close();
 
   const colors = gui.addFolder('Hero paint');

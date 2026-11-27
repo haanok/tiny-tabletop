@@ -6,8 +6,9 @@ import { t } from '../i18n/i18n.js';
 export const ENEMIES = {
   troll: {
     color: '#3f6b3a',
-    dc: 14,
-    maxHp: 3,
+    dc: 16,
+    maxHp: 4,
+    fumbleDmg: 2,
     quest: 'troll',
     reward: 25,
     cry: 'roar',
@@ -15,15 +16,46 @@ export const ENEMIES = {
   },
   crab: {
     color: '#c0452e',
-    dc: 13,
-    maxHp: 4,
+    dc: 15,
+    maxHp: 5,
+    fumbleDmg: 2,
     quest: 'lens',
     reward: 15,
     cry: 'snap',
     respawn: { board: 'gullhaven', cell: [7, 6] },
-    sneak: { dc: 15 },
+    sneak: { dc: 17 },
   },
 };
+
+/** Chance a single d20 + bonus check beats dc (natural 20 always hits, natural 1 always misses). */
+export const checkChance = (bonus, dc) => Math.min(0.95, Math.max(0.05, (21 - (dc - bonus)) / 20));
+
+/**
+ * Exact odds of winning a fight from here, assuming the hero always uses clovers on a miss and
+ * drinks a potion whenever the next blow could be fatal.
+ */
+export function winChance({ bonus, dc, enemyHp, hp, maxHp: mx, potions, clovers, fumbleDmg = 1 }) {
+  const p = checkChance(bonus, dc);
+  const crit = 0.05;
+  const nat1 = 0.05;
+  const memo = new Map();
+  const f = (e, h, pot, c) => {
+    if (e <= 0) return 1;
+    if (h <= 0) return 0;
+    if (pot > 0 && h <= fumbleDmg && h < mx) return f(e, Math.min(mx, h + 2), pot - 1, c);
+    const k = `${e},${h},${pot},${c}`;
+    if (memo.has(k)) return memo.get(k);
+    const miss = c > 0
+      ? (1 - p) * f(e, h, pot, c - 1)
+      : nat1 * f(e, h - fumbleDmg, pot, 0) + (1 - p - nat1) * f(e, h - 1, pot, 0);
+    const v = crit * f(e - 2, h, pot, c) + (p - crit) * f(e - 1, h, pot, c) + miss;
+    memo.set(k, v);
+    return v;
+  };
+  return f(enemyHp, hp, potions, clovers);
+}
+
+const VERDICTS = [[0.15, 'doomed', 'bad'], [0.35, 'grim', 'bad'], [0.55, 'risky', 'bad'], [0.75, 'even', ''], [2, 'good', 'good']];
 
 const hearts = (n, max, cls = '') =>
   Array.from({ length: max }, (_, i) => `<span class="heart ${cls} ${i < n ? 'full' : 'empty'}">♥</span>`).join('');
@@ -53,14 +85,50 @@ export function createEncounters(ctx) {
     else { ctx.sfx(E.cry); ctx.music('battle'); }
     const choices = [];
     if (E.sneak) {
-      choices.push({ label: t('fight.sneakChoice'), sub: t('fight.sneakSub', { bonus: sneakBonus(state), dc: E.sneak.dc }), onSelect: () => sneak(id) });
+      choices.push({ label: t('fight.sneakChoice'), sub: `${t('fight.sneakSub', { bonus: sneakBonus(state), dc: E.sneak.dc })} · ${pct(1 - (1 - checkChance(sneakBonus(state), E.sneak.dc)) ** (1 + state.clovers))}%`, onSelect: () => sneak(id) });
     }
     choices.push({
-      label: t('fight.fightChoice'), sub: t('fight.fightSub', { bonus: attackBonus(state), dc: E.dc }),
-      onSelect: () => { wake(id); round(id); },
+      label: t('fight.fightChoice'), sub: t('fight.fightSub', { bonus: attackBonus(state) + (state.oil > 0 && !state.oiled ? 2 : 0), dc: E.dc }),
+      onSelect: () => { wake(id); const oil = applyOil(); round(id, oil ? tx(id, 'idle') + oil : undefined); },
     });
     choices.push({ label: t('fight.backAway'), onSelect: () => flee(id) });
-    show(id, tx(id, 'intro'), choices);
+    show(id, tx(id, 'intro') + oddsLine(id), choices);
+  }
+
+  const pct = (x) => Math.round(x * 100);
+
+  /** Win odds shown before a fight, with a nudge to gear up when they are poor. */
+  function oddsLine(id) {
+    const E = ENEMIES[id];
+    const chance = winChance({
+      bonus: attackBonus(state) + (state.oil > 0 && !state.oiled ? 2 : 0),
+      dc: E.dc,
+      enemyHp: state.enemies[id].hp,
+      hp: state.hp,
+      maxHp: maxHp(state),
+      potions: state.potions,
+      clovers: state.clovers,
+      fumbleDmg: E.fumbleDmg,
+    });
+    const [, verdict, cls] = VERDICTS.find(([lim]) => chance < lim);
+    const line = t('fight.odds', { pct: pct(chance), verdict: t(`fight.verdict.${verdict}`), cls });
+    return `<div class="fight-odds">${line}${chance < 0.55 ? `<br><span class="muted">${t('fight.gearUp')}</span>` : ''}</div>`;
+  }
+
+  /** Apply a flask of Bane Oil at the start of a fight. */
+  function applyOil() {
+    if (state.oiled || state.oil <= 0) return '';
+    state.oil -= 1;
+    state.oiled = true;
+    ctx.sfx('luck');
+    ctx.popupHero('+2 ⚔️', 'luck');
+    ctx.changed();
+    return `<br><span class="muted">${t('fight.oilApplied')}</span>`;
+  }
+
+  /** Fight over (won, lost or fled): the oil wears off. */
+  function endFight() {
+    state.oiled = false;
   }
 
   function wake(id) {
@@ -142,7 +210,7 @@ export function createEncounters(ctx) {
     ctx.sfx('swing');
     await enemy.attack();
     if (await hurtHero()) return defeat(id);
-    round(id, t('fight.freePinch', { line }));
+    round(id, t('fight.freePinch', { line }) + applyOil());
   }
 
   // ---------------- Fight ----------------
@@ -187,17 +255,17 @@ export function createEncounters(ctx) {
       show(id, `${line} <b class="bad">${t(r === 1 ? 'fight.fumble' : 'fight.missShort')}</b>`);
       ctx.sfx(ENEMIES[id].cry === 'snap' ? 'snap' : 'swing');
       await enemy.attack();
-      if (await hurtHero()) return defeat(id);
+      if (await hurtHero(r === 1 ? ENEMIES[id].fumbleDmg : 1)) return defeat(id);
       round(id, `${line} <b class="bad">${tx(id, 'miss')}</b>`);
     }
   }
 
-  /** One point of damage to the hero; returns true if knocked out. */
-  async function hurtHero() {
+  /** Damage the hero; returns true if knocked out. */
+  async function hurtHero(dmg = 1) {
     ctx.sfx('hurt');
     hero.hit();
-    state.hp = Math.max(0, state.hp - 1);
-    ctx.popupHero('-1 ♥', 'dmg');
+    state.hp = Math.max(0, state.hp - dmg);
+    ctx.popupHero(`-${dmg} ♥`, 'dmg');
     ctx.changed();
     await wait(0.5);
     return state.hp <= 0;
@@ -213,6 +281,7 @@ export function createEncounters(ctx) {
   }
 
   function flee(id) {
+    endFight();
     state.enemies[id].hp = ENEMIES[id].maxHp;
     ctx.enemy(id).setAsleep?.(true);
     ctx.music(null);
@@ -227,6 +296,7 @@ export function createEncounters(ctx) {
     ctx.music(null, { silent: true });
     await ctx.enemy(id).defeat();
     ctx.sfx('victory');
+    endFight();
     state.enemies[id].defeated = true;
     ctx.onEnemyDefeated(id);
     state.gold += E.reward;
@@ -245,6 +315,7 @@ export function createEncounters(ctx) {
     ctx.music(null, { silent: true });
     ctx.sfx('defeat');
     await wait(1.2);
+    endFight();
     const lost = Math.floor(state.gold / 2);
     state.gold -= lost;
     state.hp = maxHp(state);

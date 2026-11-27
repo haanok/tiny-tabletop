@@ -24,7 +24,7 @@ const M = {
   stone: paint('#9a948c', { flatShading: true }),
   wood: paint('#9a6a3a'),
   darkWood: paint('#5e3f26'),
-  glass: paint('#ffd98a', { emissive: '#ffb84a', emissiveIntensity: 0.8 }),
+  glass: paint('#ffd98a', { emissive: '#ff9a2e', emissiveIntensity: 2.4 }),
   water: paint('#4aa3c8', { roughness: 0.15 }),
   white: paint('#f4f0e8'),
   red: paint('#d6473b'),

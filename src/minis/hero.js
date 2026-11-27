@@ -1,6 +1,7 @@
 import {
   BoxGeometry,
   CapsuleGeometry,
+  ConeGeometry,
   CylinderGeometry,
   DoubleSide,
   ExtrudeGeometry,
@@ -16,14 +17,14 @@ import { buildChibi, chibiMaterials } from './chibi.js';
 import { tween, flash, materialsOf } from '../core/anim.js';
 
 export const DEFAULT_PALETTE = {
-  skin: '#ffd3b4',
-  hair: '#8a4b2a',
-  tunic: '#3f7fd4',
-  cape: '#d6473b',
-  metal: '#cdd3db',
-  accent: '#e8b63d',
-  leather: '#6e4228',
-  boots: '#4a2f20',
+  skin: '#e9c2a6',
+  hair: '#2a2420',
+  tunic: '#2b2e35',
+  cape: '#6b1717',
+  metal: '#848b95',
+  accent: '#b08a46',
+  leather: '#3a2618',
+  boots: '#1f1d1c',
 };
 
 const HOP_TIME = 0.28;
@@ -53,38 +54,111 @@ export function createHero({ palette = DEFAULT_PALETTE } = {}) {
   root.name = 'hero';
   root.add(createBase({ seed: 11 }));
 
-  const { figure, head, right, left, R } = buildChibi(mats);
+  const { figure, head, right, left, R } = buildChibi(mats, { hair: false });
   root.add(figure);
+  const darkSteel = metal('#4a4f57');
+  const slitMat = paint('#050505', { roughness: 1 });
+  const emberMat = paint('#ffb347', { emissive: '#ff8a1f', emissiveIntensity: 3.2 });
+  const boneMat = paint('#d8ccb0', { roughness: 0.55 });
 
-  // Cape
-  const cape = new Mesh(new CylinderGeometry(0.1, 0.19, 0.34, 20, 1, true, Math.PI - 1.25, 2.5), mats.cape);
-  cape.position.set(0, 0.28, -0.015);
-  cape.rotation.x = -0.12;
+  // Tattered cape: long, with a jagged hem of hanging strips
+  const cape = new Mesh(new CylinderGeometry(0.1, 0.21, 0.4, 20, 1, true, Math.PI - 1.3, 2.6), mats.cape);
+  cape.position.set(0, 0.25, -0.02);
+  cape.rotation.x = -0.14;
   figure.add(cape);
-  for (const side of [-1, 1]) {
-    const clasp = new Mesh(new SphereGeometry(0.022, 10, 8), mats.accent);
-    clasp.position.set(side * 0.085, 0.42, 0.07);
-    figure.add(clasp);
+  for (let i = 0; i < 5; i++) {
+    const a = Math.PI - 1.0 + i * 0.5;
+    const strip = new Mesh(new BoxGeometry(0.06, 0.07 + (i % 2) * 0.04, 0.008), mats.cape);
+    strip.position.set(Math.sin(a) * 0.2, 0.02 - (i % 2) * 0.02, Math.cos(a) * 0.2 - 0.04);
+    strip.rotation.set(-0.2, a, 0);
+    figure.add(strip);
   }
 
-  // Cowlick
-  const cowlick = new Mesh(new CylinderGeometry(0, 0.025, 0.09, 6), mats.hair);
-  cowlick.position.set(0.02, R * 1.05, -0.02);
-  cowlick.rotation.set(-0.5, 0, -0.3);
-  head.add(cowlick);
-
-  // Armour (hidden until bought)
-  const armour = new Group();
-  const plate = new Mesh(new CapsuleGeometry(0.128, 0.06, 6, 16, ), mats.metal);
+  // Breastplate + gorget + faulds (always worn)
+  const plate = new Mesh(new CapsuleGeometry(0.13, 0.06, 6, 16), mats.metal);
   plate.scale.set(1, 1, 0.9);
   plate.position.y = 0.33;
-  armour.add(plate);
-  for (const side of [-1, 1]) {
-    const pauldron = new Mesh(new SphereGeometry(0.065, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), mats.metal);
-    pauldron.position.set(side * 0.15, 0.39, 0);
-    pauldron.rotation.z = side * -0.4;
-    armour.add(pauldron);
+  figure.add(plate);
+  const ridge = new Mesh(new BoxGeometry(0.02, 0.16, 0.03), darkSteel);
+  ridge.position.set(0, 0.34, 0.115);
+  figure.add(ridge);
+  const gorget = new Mesh(new CylinderGeometry(0.1, 0.13, 0.06, 18), darkSteel);
+  gorget.position.y = 0.44;
+  figure.add(gorget);
+  for (let i = 0; i < 4; i++) {
+    const a = -0.9 + i * 0.6;
+    const fauld = new Mesh(new BoxGeometry(0.08, 0.08, 0.02), darkSteel);
+    fauld.position.set(Math.sin(a) * 0.14, 0.19, Math.cos(a) * 0.14);
+    fauld.rotation.set(0.15, a, 0);
+    figure.add(fauld);
   }
+
+  // Pauldrons with bone spikes
+  for (const side of [-1, 1]) {
+    const pauldron = new Mesh(new SphereGeometry(0.075, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), darkSteel);
+    pauldron.position.set(side * 0.155, 0.39, 0);
+    pauldron.rotation.z = side * -0.45;
+    figure.add(pauldron);
+    const spike = new Mesh(new ConeGeometry(0.02, 0.09, 8), boneMat);
+    spike.position.set(side * 0.19, 0.45, 0);
+    spike.rotation.z = side * -0.6;
+    figure.add(spike);
+  }
+  // Vambraces
+  for (const { arm } of [right, left]) {
+    const v = new Mesh(new CylinderGeometry(0.05, 0.055, 0.07, 12), mats.metal);
+    v.position.y = -0.11;
+    arm.add(v);
+  }
+
+  // Great helm: covers the face; a T-visor with ember eyes; curled horns
+  const helm = new Group();
+  const dome = new Mesh(new SphereGeometry(R * 1.1, 32, 24), mats.metal);
+  dome.scale.set(1, 1.02, 1);
+  helm.add(dome);
+  const brow = new Mesh(new TorusGeometry(R * 1.08, 0.014, 8, 40), darkSteel);
+  brow.rotation.x = Math.PI / 2;
+  brow.position.y = 0.035;
+  helm.add(brow);
+  const slitH = new Mesh(new BoxGeometry(0.22, 0.032, 0.05), slitMat);
+  slitH.position.set(0, -0.005, R * 1.04);
+  const slitV = new Mesh(new BoxGeometry(0.032, 0.11, 0.05), slitMat);
+  slitV.position.set(0, -0.06, R * 1.03);
+  helm.add(slitH, slitV);
+  for (const side of [-1, 1]) {
+    const eye = new Mesh(new SphereGeometry(0.013, 10, 8), emberMat);
+    eye.position.set(side * 0.055, -0.005, R * 1.09);
+    helm.add(eye);
+    const horn = new Group();
+    const h1 = new Mesh(new ConeGeometry(0.035, 0.13, 10), boneMat);
+    h1.position.y = 0.06;
+    horn.add(h1);
+    horn.position.set(side * R * 0.95, 0.07, 0);
+    horn.rotation.set(-0.2, 0, side * -0.95);
+    helm.add(horn);
+  }
+  const crest = new Mesh(new BoxGeometry(0.022, 0.05, R * 1.9), darkSteel);
+  crest.position.y = R * 1.08;
+  helm.add(crest);
+  head.add(helm);
+
+  // Upgrade armour: gilded trims and a heavier spiked mantle (hidden until bought)
+  const armour = new Group();
+  for (const side of [-1, 1]) {
+    const trim = new Mesh(new TorusGeometry(0.073, 0.009, 6, 20), mats.accent);
+    trim.position.set(side * 0.155, 0.39, 0);
+    trim.rotation.set(Math.PI / 2, side * 0.45, 0);
+    armour.add(trim);
+    for (const dz of [-0.04, 0.04]) {
+      const spike = new Mesh(new ConeGeometry(0.014, 0.07, 8), boneMat);
+      spike.position.set(side * 0.18, 0.43, dz);
+      spike.rotation.z = side * -0.5;
+      armour.add(spike);
+    }
+  }
+  const sigil = new Mesh(new ExtrudeGeometry(starShape(0.045, 0.015, 4), { depth: 0.01, bevelEnabled: false }), mats.accent);
+  sigil.position.set(0, 0.35, 0.118);
+  armour.add(sigil);
   armour.visible = false;
   figure.add(armour);
 
@@ -94,14 +168,14 @@ export function createHero({ palette = DEFAULT_PALETTE } = {}) {
   // Sword
   const sword = new Group();
   const bladeGroup = new Group();
-  const blade = new Mesh(new BoxGeometry(0.034, 0.36, 0.012), swordMat);
+  const blade = new Mesh(new BoxGeometry(0.042, 0.38, 0.012), swordMat);
   blade.position.y = 0.23;
   const tip = new Mesh(new CylinderGeometry(0, 0.024, 0.05, 4), swordMat);
   tip.rotation.y = Math.PI / 4;
   tip.scale.z = 0.35;
   tip.position.y = 0.435;
   bladeGroup.add(blade, tip);
-  const guard = new Mesh(new BoxGeometry(0.12, 0.022, 0.03), mats.accent);
+  const guard = new Mesh(new BoxGeometry(0.14, 0.024, 0.032), darkSteel);
   guard.position.y = 0.05;
   const grip = new Mesh(new CylinderGeometry(0.014, 0.014, 0.08, 8), mats.leather);
   const pommel = new Mesh(new SphereGeometry(0.022, 10, 8), mats.accent);
@@ -110,17 +184,26 @@ export function createHero({ palette = DEFAULT_PALETTE } = {}) {
   sword.rotation.set(1.0, 0, 0.3);
   right.hand.add(sword);
 
-  // Shield
+  // Shield: dark heater shield with a brass rim and a four-point star
   const shield = new Group();
-  const face = new Mesh(new CylinderGeometry(0.15, 0.15, 0.03, 28), mats.tunic);
-  face.rotation.x = Math.PI / 2;
-  const rim = new Mesh(new TorusGeometry(0.15, 0.016, 8, 32), mats.metal);
-  const boss = new Mesh(new SphereGeometry(0.035, 12, 8), mats.metal);
+  const heater = new Shape();
+  heater.moveTo(-0.14, 0.13);
+  heater.lineTo(0.14, 0.13);
+  heater.lineTo(0.14, 0.02);
+  heater.quadraticCurveTo(0.13, -0.12, 0, -0.19);
+  heater.quadraticCurveTo(-0.13, -0.12, -0.14, 0.02);
+  heater.closePath();
+  const face = new Mesh(new ExtrudeGeometry(heater, { depth: 0.02, bevelEnabled: true, bevelSize: 0.012, bevelThickness: 0.008, bevelSegments: 2 }), mats.cape);
+  face.position.z = -0.015;
+  const rimMesh = new Mesh(new ExtrudeGeometry(heater, { depth: 0.012, bevelEnabled: false }), darkSteel);
+  rimMesh.scale.setScalar(1.09);
+  rimMesh.position.z = -0.02;
+  const star = new Mesh(new ExtrudeGeometry(starShape(0.08, 0.025, 4), { depth: 0.008, bevelEnabled: false }), mats.accent);
+  star.position.z = 0.016;
+  const boss = new Mesh(new SphereGeometry(0.025, 12, 8), mats.accent);
   boss.scale.z = 0.6;
-  boss.position.z = 0.02;
-  const star = new Mesh(new ExtrudeGeometry(starShape(0.09, 0.04), { depth: 0.008, bevelEnabled: false }), mats.accent);
-  star.position.z = 0.015;
-  shield.add(face, rim, star, boss);
+  boss.position.z = 0.025;
+  shield.add(rimMesh, face, star, boss);
   shield.position.set(0.05, -0.02, 0.06);
   shield.rotation.set(0.35, 0.75, -0.4);
   left.hand.add(shield);
@@ -149,10 +232,10 @@ export function createHero({ palette = DEFAULT_PALETTE } = {}) {
   /** Visual upgrades: swordLevel 0..2, armour boolean. */
   function setGear({ swordLevel = 0, armour: hasArmour = false, boots = false }) {
     armour.visible = hasArmour;
-    mats.boots.color.set(boots ? '#2f9a9a' : pal.boots);
+    mats.boots.color.set(boots ? '#2c4a4a' : pal.boots);
     bladeGroup.scale.set(1 + swordLevel * 0.15, 1 + swordLevel * 0.18, 1);
-    swordMat.emissive.set(swordLevel >= 2 ? '#5fb8ff' : swordLevel === 1 ? '#ffffff' : '#000000');
-    swordMat.emissiveIntensity = swordLevel >= 2 ? 0.55 : swordLevel === 1 ? 0.12 : 0;
+    swordMat.emissive.set(swordLevel >= 2 ? '#4fa8ff' : swordLevel === 1 ? '#ff7a2a' : '#000000');
+    swordMat.emissiveIntensity = swordLevel >= 2 ? 1.6 : swordLevel === 1 ? 0.35 : 0;
   }
 
   function place(c, pos) {

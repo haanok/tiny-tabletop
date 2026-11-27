@@ -8,6 +8,8 @@ import {
   MeshBasicMaterial,
   PCFSoftShadowMap,
   Plane,
+  PMREMGenerator,
+  PointLight,
   Raycaster,
   RingGeometry,
   Scene,
@@ -16,6 +18,8 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { setMetalEnv } from './minis/materials.js';
 import { createCamera } from './scene/camera.js';
 import { addLighting } from './scene/lighting.js';
 import { createTable } from './scene/table.js';
@@ -50,15 +54,17 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = SRGBColorSpace;
 renderer.toneMapping = ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 0.92;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 const scene = new Scene();
 const lights = addLighting(scene);
-scene.background = new Color('#2b1e15');
-scene.fog = new Fog('#2b1e15', 24, 48);
+// Faint studio reflections so steel reads as steel instead of black.
+setMetalEnv(new PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture);
+scene.background = new Color('#0b0908');
+scene.fog = new Fog('#0b0908', 16, 38);
 const { camera, controls } = createCamera(renderer.domElement);
 const fx = createPostFX(renderer, scene, camera);
 const table = createTable(scene);
@@ -124,6 +130,10 @@ let board = getBoard(state.board);
 board.group.visible = true;
 
 const hero = createHero();
+// A warm torch-glow that travels with the hero through the gloom.
+const lantern = new PointLight('#ff9a4a', 1.3, 3.6, 1.6);
+lantern.position.set(0.3, 1.05, 0.35);
+hero.object.add(lantern);
 const start = BOARDS[state.board].start;
 hero.place({ gx: start[0], gz: start[1] }, board.worldPos(start[0], start[1]));
 scene.add(hero.object);

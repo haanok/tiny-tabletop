@@ -49,14 +49,20 @@ export const TiltShiftShader = {
   `,
 };
 
-/** Saturation / contrast / vignette — the "toy photo" grade. Works in linear space. */
+/**
+ * The "painted mini under a moody lamp" grade, in linear space:
+ * saturation, contrast, cold-shadow / warm-highlight split tone, heavy vignette, light film grain.
+ */
 export const GradeShader = {
   name: 'GradeShader',
   uniforms: {
     tDiffuse: { value: null },
-    saturation: { value: 1.35 },
-    contrast: { value: 1.12 },
-    vignette: { value: 0.45 },
+    saturation: { value: 0.92 },
+    contrast: { value: 1.22 },
+    vignette: { value: 0.85 },
+    tint: { value: 0.6 },
+    grain: { value: 0.035 },
+    time: { value: 0 },
   },
   vertexShader,
   fragmentShader: /* glsl */ `
@@ -64,7 +70,12 @@ export const GradeShader = {
     uniform float saturation;
     uniform float contrast;
     uniform float vignette;
+    uniform float tint;
+    uniform float grain;
+    uniform float time;
     varying vec2 vUv;
+
+    float rand(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
     void main() {
       vec4 c = texture2D(tDiffuse, vUv);
@@ -72,9 +83,18 @@ export const GradeShader = {
       float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
       col = max(mix(vec3(l), col, saturation), vec3(0.0));
       col = 0.18 * pow(col / 0.18, vec3(contrast));
-      float v = smoothstep(0.85, 0.3, length(vUv - 0.5));
+
+      // Split tone: teal in the shadows, amber in the highlights.
+      float lum = clamp(l / 0.5, 0.0, 1.0);
+      vec3 toneC = mix(vec3(0.82, 0.95, 1.08), vec3(1.1, 1.0, 0.86), smoothstep(0.1, 0.9, lum));
+      col *= mix(vec3(1.0), toneC, tint);
+
+      float v = smoothstep(0.8, 0.22, length((vUv - 0.5) * vec2(1.15, 1.0)));
       col *= mix(1.0, v, vignette);
-      gl_FragColor = vec4(col, c.a);
+
+      float n = rand(vUv * 1000.0 + fract(time) * 37.0) - 0.5;
+      col += n * grain * (0.25 + col);
+      gl_FragColor = vec4(max(col, vec3(0.0)), c.a);
     }
   `,
 };

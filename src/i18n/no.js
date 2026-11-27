@@ -12,6 +12,7 @@ export default {
     sneak: 'Snikebonus',
     potions: 'Helsedrikker',
     clovers: 'Firkløvere',
+    oil: 'Bladolje (+2 angrep i én kamp)',
     music: 'Musikk',
     sfx: 'Lydeffekter',
     language: 'Språk',
@@ -66,6 +67,7 @@ export default {
     whetstone: { name: 'Slipestein', desc: '+1 på angrepskast' },
     tinPlate: { name: 'Blikkrustning', desc: '+1 maks hjerte' },
     potion: { name: 'Helsedrikk', desc: 'Gir 2 hjerter tilbake (når som helst)' },
+    oil: { name: 'Bladolje', desc: '+2 på angrepsslag i neste kamp' },
     clover: { name: 'Firkløver', desc: 'Kast på nytt etter ett mislykket slag' },
     narwhal: { name: 'Narhvalsverd', desc: '+2 på angrepskast' },
     coralMail: { name: 'Korallbrynje', desc: '+1 maks hjerte' },
@@ -86,7 +88,7 @@ export default {
     pip: {
       greeting: 'Pssst! Blanke saker for blanke mynter! Pip har varer fra alle fire hjørner av bordet.',
       gossip: 'Kusina til Pip, Bess, har en bod i <b>Måkehavn</b>, østover langs veien. Finere sverd, mer fiskelukt. ' +
-        'Og trollet i myra? Tregt, men slår hardt. En skarp egg og en firkløver gjør hele forskjellen!',
+        'Og trollet i myra? Tregt, men slår hardt. Ingen slår det med en smørkniv. Slip bladet, kjøp rustning, og ta med helsedrikker og bladolje!',
     },
     bess: {
       greeting: 'Ohoi, landkrabbe! Fersk fisk, finere stål og støvler som ikke knirker. Hva skal det være?',
@@ -109,7 +111,7 @@ export default {
       'Der vokste ting som ikke burde vokse: selvlysende sopp, sinte frosker, og verst av alt <b>Grumlegap</b>, et troll som en gang var en mosegrodd stein til teen vekket det.',
     tips: 'Hvert slag er et sjansespill. Kast <b>d20</b> og legg til angrepsbonusen din (din er <b>+{bonus}</b>). ' +
       'Slår du minst <b>{dc}</b>, treffer du; bommer du, slår det tilbake. En naturlig <b>20</b> treffer dobbelt så hardt, en naturlig <b>1</b> bommer alltid. ' +
-      'Tre gode treff, så velter det. Følg det lysende sporet; det fører deg rett til hulen.',
+      'Det trengs <b>{hp}</b> gode treff for å velte det, og en naturlig 1 betyr et knusende slag. Ikke gå inn med bart stål og tre hjerter. Følg det lysende sporet; det fører deg rett til hulen.',
     readyText: 'Ved barten min... du <b>klarte det</b>! Hele torget hørte Grumlegap stønne. Fingerbøl står i gjeld til deg.',
     claim: 'Hent belønningen',
     claimSub: '+30 gull og en tittel',
@@ -119,8 +121,8 @@ export default {
     thanks: 'Tusen takk, sersjant',
     greetNone: 'Stopp! Hvem der... å. En eventyrer, å dømme etter den kappen. Vi kunne trenge en sånn.',
     greetActive: 'Grumlegap snorker fortsatt i myra mot nord. Angrepsbonusen din er <b>+{bonus}</b>. {comment}',
-    lowBonus: 'Litt lavt, spør du meg.',
-    goodBonus: 'Ser skarpt ut!',
+    lowBonus: 'Det biter ikke på trollhud. Gå til Pip, eller Bess i Måkehavn, før du prøver.',
+    goodBonus: 'Det er et blad som biter. Fyll opp med helsedrikker og dra.',
     greetComplete: 'Hei, Myrtemmer! Veien nordover er stille nå. Ingenting igjen der ute enn frosker og sopp.',
     askPlace: 'Hva er dette for et sted?',
     askBog: 'Fortell om myra.',
@@ -221,7 +223,7 @@ export default {
     fleeSub: '{name} kommer seg hvis du går',
     critHit: 'KRITISK TREFF!',
     hit: 'Treff!',
-    fumble: 'Naturlig 1. Du snubler i din egen kappe!',
+    fumble: 'Naturlig 1. Du snubler, og fienden lander et knusende slag!',
     missShort: 'Bom!',
     drank: 'Du skyller ned helsedrikken. Den smaker jordbær og mot.',
     victory: 'Seier!',
@@ -231,5 +233,9 @@ export default {
     wakeUp: 'Du våkner med en kul i hodet{lost}. Kanskje du burde innom en butikk før du prøver igjen?',
     lostGold: ' og <b>{n} gull</b> mindre i pungen',
     ouch: 'Au',
+    odds: 'Sjansen din i kamp: <b class="{cls}">{pct} %</b> ({verdict})',
+    verdict: { doomed: 'håpløs', grim: 'dyster', risky: 'risikabel', even: 'jevn', good: 'god' },
+    gearUp: 'Du føler deg sørgelig underlegen. Bedre rustning, et skarpere blad og noen helsedrikker ville gjort hele forskjellen.',
+    oilApplied: 'Du gnir bladolje langs sverdet. Det freser og gløder (+2 i denne kampen).',
   },
 };

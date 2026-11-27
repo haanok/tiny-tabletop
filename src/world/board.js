@@ -41,14 +41,14 @@ const CHARS = {
 };
 
 const TYPE = {
-  grass: { hsl: [0.26, 0.42, 0.46], h: 0 },
-  meadow: { hsl: [0.22, 0.48, 0.54], h: 0 },
-  stone: { hsl: [0.08, 0.1, 0.6], h: 0.01 },
-  path: { hsl: [0.09, 0.32, 0.56], h: -0.01 },
-  sand: { hsl: [0.12, 0.45, 0.72], h: -0.005 },
-  dock: { hsl: [0.07, 0.38, 0.42], h: 0.02 },
-  bog: { hsl: [0.28, 0.22, 0.27], h: -0.03 },
-  water: { hsl: [0.53, 0.5, 0.45], h: -0.09 },
+  grass: { hsl: [0.25, 0.3, 0.3], h: 0 },
+  meadow: { hsl: [0.22, 0.32, 0.35], h: 0 },
+  stone: { hsl: [0.07, 0.07, 0.27], h: 0.01 },
+  path: { hsl: [0.08, 0.2, 0.34], h: -0.01 },
+  sand: { hsl: [0.11, 0.26, 0.52], h: -0.005 },
+  dock: { hsl: [0.07, 0.28, 0.26], h: 0.02 },
+  bog: { hsl: [0.3, 0.2, 0.16], h: -0.03 },
+  water: { hsl: [0.55, 0.45, 0.24], h: -0.09 },
 };
 
 function hash(x, z, s = 0) {
@@ -74,7 +74,7 @@ const flowerMat = paint('#ffffff', { roughness: 0.6 });
 const coinMat = metal('#f5c542');
 coinMat.emissive.set('#a06a00');
 coinMat.emissiveIntensity = 0.35;
-const FLOWERS = ['#ff8fb1', '#fff27a', '#ffffff', '#b99cff'];
+const FLOWERS = ['#a8455f', '#c9a94a', '#cfc6b4', '#6d5aa0'];
 
 const arrowShape = new Shape();
 arrowShape.moveTo(0, 0.28);
@@ -166,7 +166,7 @@ export function buildBoard(id, npcFactory, collected) {
   for (const tr of oaks) {
     const s = 0.8 + hash(tr.gx, tr.gz, 14) * 0.5;
     const hue = 0.26 + hash(tr.gx, tr.gz, 15) * 0.07;
-    const light = 0.3 + hash(tr.gx, tr.gz, 16) * 0.1;
+    const light = 0.17 + hash(tr.gx, tr.gz, 16) * 0.08;
     for (const [x, y, z, r] of [[0, 0.72, 0, 0.36], [0.18, 0.58, 0.1, 0.25], [-0.17, 0.6, -0.06, 0.26], [0.02, 0.98, 0, 0.24]]) {
       blobs.push({ x: tr.gx + x * s, y: tr.h + y * s, z: tr.gz + z * s, r: r * s, hue, light });
     }
@@ -175,7 +175,7 @@ export function buildBoard(id, npcFactory, collected) {
     d.position.set(b.x, b.y, b.z);
     d.rotation.set(b.x, b.z, 0);
     d.scale.setScalar(b.r);
-    c.setHSL(b.hue, 0.5, b.light);
+    c.setHSL(b.hue, 0.38, b.light);
   });
   foliage && group.add(foliage);
 
@@ -184,7 +184,7 @@ export function buildBoard(id, npcFactory, collected) {
     d.position.set(gx + (hash(gx, gz, 18) - 0.5) * 0.2, h + s * 0.45, gz);
     d.rotation.set(hash(gx, gz, 19) * 3, hash(gx, gz, 20) * 3, 0);
     d.scale.set(s, s * 0.75, s);
-    c.setHSL(type === 'sand' ? 0.08 : 0.1, 0.06, 0.45 + hash(gx, gz, 21) * 0.15);
+    c.setHSL(type === 'sand' ? 0.08 : 0.6, 0.05, 0.3 + hash(gx, gz, 21) * 0.12);
   });
   rocks && group.add(rocks);
 

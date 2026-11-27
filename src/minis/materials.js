@@ -5,9 +5,20 @@ export function paint(color, opts = {}) {
   return new MeshStandardMaterial({ color, roughness: 0.78, metalness: 0, ...opts });
 }
 
-/** Slightly shiny drybrushed metal. */
+const metals = [];
+let metalEnv = null;
+
+/** Slightly shiny drybrushed metal. Picks up the shared reflection map once one is set. */
 export function metal(color) {
-  return new MeshStandardMaterial({ color, roughness: 0.38, metalness: 0.65 });
+  const m = new MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.65, envMap: metalEnv, envMapIntensity: 0.45 });
+  metals.push(m);
+  return m;
+}
+
+/** Give every metal material (existing and future) a reflection map, so steel reads in dim light. */
+export function setMetalEnv(tex) {
+  metalEnv = tex;
+  for (const m of metals) { m.envMap = tex; m.needsUpdate = true; }
 }
 
 /** Deterministic RNG so scenery is the same every load. */

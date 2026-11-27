@@ -8,7 +8,8 @@ const SHOPS = {
   pip: [
     { id: 'whetstone', price: 8, owned: (s) => s.gear.whetstone, buy: (s) => { s.gear.whetstone = true; } },
     { id: 'tinPlate', price: 15, owned: (s) => s.gear.tinPlate, buy: (s) => { s.gear.tinPlate = true; s.hp += 1; } },
-    { id: 'potion', price: 6, owned: () => false, buy: (s) => { s.potions += 1; } },
+    { id: 'potion', price: 7, owned: () => false, buy: (s) => { s.potions += 1; } },
+    { id: 'oil', price: 9, owned: () => false, buy: (s) => { s.oil += 1; } },
     { id: 'clover', price: 10, owned: () => false, buy: (s) => { s.clovers += 1; } },
   ],
   bess: [
@@ -79,7 +80,7 @@ export function createTalk(ctx) {
   }
 
   // ---------------- Sergeant Bramble ----------------
-  const trollTips = () => t('bramble.tips', { bonus: attackBonus(state), dc: ENEMIES.troll.dc });
+  const trollTips = () => t('bramble.tips', { bonus: attackBonus(state), dc: ENEMIES.troll.dc, hp: ENEMIES.troll.maxHp });
 
   function bramble() {
     const q = state.quests.troll;
@@ -96,7 +97,7 @@ export function createTalk(ctx) {
     const bonus = attackBonus(state);
     const greeting = {
       none: t('bramble.greetNone'),
-      active: t('bramble.greetActive', { bonus, comment: t(bonus < 2 ? 'bramble.lowBonus' : 'bramble.goodBonus') }),
+      active: t('bramble.greetActive', { bonus, comment: t(bonus < 3 ? 'bramble.lowBonus' : 'bramble.goodBonus') }),
       complete: t('bramble.greetComplete'),
     }[q];
     const choices = [

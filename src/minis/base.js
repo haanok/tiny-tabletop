@@ -7,7 +7,7 @@ export const BASE_HEIGHT = 0.07;
  * Round painted miniature base: black rim, flocked grass top and a few tufts.
  * Returns a group whose top surface sits at y = BASE_HEIGHT.
  */
-export function createBase({ radius = 0.38, seed = 7, grass = '#6fa54a' } = {}) {
+export function createBase({ radius = 0.38, seed = 7, grass = '#3f5a2e' } = {}) {
   const g = new Group();
   const rand = seededRandom(seed);
 
@@ -22,7 +22,7 @@ export function createBase({ radius = 0.38, seed = 7, grass = '#6fa54a' } = {}) 
   top.position.y = BASE_HEIGHT + 0.002;
   g.add(top);
 
-  const tuftMat = paint('#8cc15a');
+  const tuftMat = paint('#566f3a');
   const tuftGeo = new ConeGeometry(0.018, 0.07, 5);
   for (let i = 0; i < 9; i++) {
     const a = rand() * Math.PI * 2;
