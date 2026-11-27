@@ -147,8 +147,9 @@ export function createHero({ palette = DEFAULT_PALETTE } = {}) {
   }
 
   /** Visual upgrades: swordLevel 0..2, armour boolean. */
-  function setGear({ swordLevel = 0, armour: hasArmour = false }) {
+  function setGear({ swordLevel = 0, armour: hasArmour = false, boots = false }) {
     armour.visible = hasArmour;
+    mats.boots.color.set(boots ? '#2f9a9a' : pal.boots);
     bladeGroup.scale.set(1 + swordLevel * 0.15, 1 + swordLevel * 0.18, 1);
     swordMat.emissive.set(swordLevel >= 2 ? '#5fb8ff' : swordLevel === 1 ? '#ffffff' : '#000000');
     swordMat.emissiveIntensity = swordLevel >= 2 ? 0.55 : swordLevel === 1 ? 0.12 : 0;
@@ -192,6 +193,7 @@ export function createHero({ palette = DEFAULT_PALETTE } = {}) {
     moveAlong,
     faceTowards,
     stop() { queue.length = 0; onArrive = null; },
+    land() { landSquash = 1; },
     get isMoving() { return !!hop || queue.length > 0; },
 
     async attack() {

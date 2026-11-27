@@ -1,28 +1,25 @@
-export const BOSS_DC = 14;
-export const BOSS_MAX_HP = 3;
+export const BASE_HP = 3;
 
 export function createState() {
   return {
     gold: 10,
-    hp: 3,
-    maxHp: 3,
-    whetstone: false,
-    fineSword: false,
-    armour: false,
+    hp: BASE_HP,
     potions: 0,
     clovers: 0,
-    quest: 'none', // none | accepted | bossDefeated | complete
-    bossHp: BOSS_MAX_HP,
-    title: '',
+    gear: { whetstone: false, narwhal: false, tinPlate: false, coralMail: false, boots: false },
+    quests: { troll: 'none', lens: 'none' }, // none | active | ready | complete
+    tracked: null,
+    enemies: {
+      troll: { hp: 3, defeated: false },
+      crab: { hp: 4, defeated: false, sneaked: false },
+    },
+    titles: [],
+    board: 'thimblecross',
+    collected: new Set(),
   };
 }
 
-export const attackBonus = (s) => (s.whetstone ? 1 : 0) + (s.fineSword ? 2 : 0);
-export const swordLevel = (s) => (s.fineSword ? 2 : s.whetstone ? 1 : 0);
-
-export const QUEST_TEXT = {
-  none: 'Talk to the guard in the square.',
-  accepted: 'Defeat Grumblemaw in the bog to the north.',
-  bossDefeated: 'Return to Sergeant Bramble for your reward.',
-  complete: 'Grumblemaw is beaten. Thimblecross is safe!',
-};
+export const maxHp = (s) => BASE_HP + (s.gear.tinPlate ? 1 : 0) + (s.gear.coralMail ? 1 : 0);
+export const attackBonus = (s) => (s.gear.whetstone ? 1 : 0) + (s.gear.narwhal ? 2 : 0);
+export const sneakBonus = (s) => (s.gear.boots ? 3 : 0);
+export const swordLevel = (s) => (s.gear.narwhal ? 2 : s.gear.whetstone ? 1 : 0);

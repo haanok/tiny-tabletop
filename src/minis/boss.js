@@ -221,30 +221,3 @@ export function createBoss() {
     },
   };
 }
-
-/** Glowing mushrooms + bones scattered around the lair (non-blocking). */
-export function createLairDecor(center, heightAt) {
-  const g = new Group();
-  const rand = seededRandom(77);
-  for (let i = 0; i < 22; i++) {
-    const a = rand() * Math.PI * 2;
-    const r = 1.2 + rand() * 2.4;
-    const x = center.gx + Math.cos(a) * r;
-    const z = center.gz + Math.sin(a) * r;
-    const glow = rand() < 0.6;
-    const m = mushroom(glow ? (rand() < 0.5 ? '#5ff0e0' : '#b47cff') : '#d6473b', 0.8 + rand() * 1.2, glow);
-    m.position.set(x, heightAt(Math.round(x), Math.round(z)), z);
-    g.add(m);
-  }
-  for (let i = 0; i < 6; i++) {
-    const bone = new Mesh(new CapsuleGeometry(0.015, 0.12, 4, 6), paint('#efe6d2'));
-    const a = rand() * Math.PI * 2;
-    const r = 1 + rand() * 2;
-    const x = center.gx + Math.cos(a) * r;
-    const z = center.gz + Math.sin(a) * r;
-    bone.rotation.set(Math.PI / 2, 0, rand() * 3);
-    bone.position.set(x, heightAt(Math.round(x), Math.round(z)) + 0.015, z);
-    g.add(bone);
-  }
-  return castAll(g);
-}

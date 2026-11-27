@@ -2,6 +2,7 @@ import './style.css';
 import {
   ACESFilmicToneMapping,
   Clock,
+  Color,
   Fog,
   Mesh,
   MeshBasicMaterial,
@@ -17,21 +18,27 @@ import {
 } from 'three';
 import { createCamera } from './scene/camera.js';
 import { addLighting } from './scene/lighting.js';
-import { createWorld, heightAt, key, BOSS_CELL } from './world/world.js';
+import { createTable } from './scene/table.js';
+import { buildBoard } from './world/board.js';
+import { BOARDS } from './world/boards.js';
 import { findPath } from './world/pathfind.js';
 import { createPostFX } from './post/tiltShift.js';
 import { createHero } from './minis/hero.js';
-import { createMerchant, createGuard, createSignpost } from './minis/npcs.js';
-import { createBoss, createLairDecor } from './minis/boss.js';
+import { createMerchant, createGuard, createFishmonger, createKeeper } from './minis/npcs.js';
+import { createBoss } from './minis/boss.js';
+import { createCrab } from './minis/crab.js';
 import { createDice } from './fx/dice.js';
-import { updateTweens } from './core/anim.js';
+import { createWaypoint } from './fx/waypoint.js';
+import { updateTweens, tween, ease } from './core/anim.js';
 import { createLabels } from './ui/labels.js';
 import { createHUD } from './ui/hud.js';
 import { createDialog } from './ui/dialog.js';
+import { createBanner } from './ui/banner.js';
 import { createDebugUI } from './ui/debug.js';
-import { createState, swordLevel } from './game/state.js';
+import { createState, swordLevel, maxHp } from './game/state.js';
+import { objective, routeHint, autoTrack } from './game/quests.js';
 import { createTalk } from './game/talk.js';
-import { createFight } from './game/fight.js';
+import { createEncounters, ENEMIES } from './game/encounter.js';
 
 // ---------------- Renderer / scene ----------------
 const renderer = new WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -46,131 +53,291 @@ document.body.appendChild(renderer.domElement);
 
 const scene = new Scene();
 const lights = addLighting(scene);
-scene.fog = new Fog(scene.background, 20, 40);
+scene.background = new Color('#2b1e15');
+scene.fog = new Fog('#2b1e15', 24, 48);
 const { camera, controls } = createCamera(renderer.domElement);
 const fx = createPostFX(renderer, scene, camera);
+const table = createTable(scene);
 
-const world = createWorld(scene);
 const labels = createLabels(camera);
 const dice = createDice(scene, labels);
 const dialog = createDialog();
+const banner = createBanner();
+const waypoint = createWaypoint(scene);
 const state = createState();
 
-// ---------------- Characters ----------------
-const START = { gx: 0, gz: 1 };
-const hero = createHero();
-hero.place(START, world.worldPos(START.gx, START.gz));
-scene.add(hero.object);
-
-const merchant = createMerchant();
-const guard = createGuard();
-const boss = createBoss();
-
-function placeProp(obj, cell, occupant, yaw = 0) {
-  obj.position.copy(world.worldPos(cell.gx, cell.gz));
-  obj.rotation.y = yaw;
-  scene.add(obj);
-  world.occupied.set(key(cell.gx, cell.gz), occupant);
-}
-placeProp(merchant.object, { gx: -2, gz: 0 }, { kind: 'merchant', npc: merchant }, 0.6);
-placeProp(guard.object, { gx: 2, gz: -3 }, { kind: 'guard', npc: guard }, 0.3);
-placeProp(boss.object, BOSS_CELL, { kind: 'boss', npc: boss }, 0);
-placeProp(createSignpost(), { gx: 1, gz: -4 }, { kind: 'prop' });
-scene.add(createLairDecor(BOSS_CELL, heightAt));
-
-const markers = {
-  guard: labels.attach(guard.object, { y: 1.2, className: 'marker quest', html: '!' }),
-  merchant: labels.attach(merchant.object, { y: 1.3, className: 'marker shop', html: '<i class="coin"></i>' }),
-  boss: labels.attach(boss.object, { y: 1.95, className: 'marker boss', html: '☠' }),
+// ---------------- Characters & boards ----------------
+const NPC_FACTORY = {
+  pip: createMerchant,
+  bramble: createGuard,
+  bess: createFishmonger,
+  marla: createKeeper,
+  troll: createBoss,
+  crab: createCrab,
 };
-const nameTags = new Map(
-  [[merchant, 0.95], [guard, 1.0], [boss, 1.6]].map(([npc, y]) => {
-    const tag = labels.attach(npc.object, { y, className: 'nametag', html: npc.name });
+// Heights for the floating marker above each character.
+const NPC_TOP = { pip: 1.3, bramble: 1.2, bess: 1.15, marla: 1.25, troll: 1.95, crab: 1.45 };
+const ARROWS = { north: '↑', south: '↓', east: '→', west: '←' };
+
+const boards = new Map();
+const markers = new Map(); // npcId -> label
+const nameTags = new Map(); // npc -> label
+
+function getBoard(id) {
+  if (boards.has(id)) return boards.get(id);
+  const b = buildBoard(id, NPC_FACTORY, state.collected);
+  b.group.visible = false;
+  scene.add(b.group);
+  boards.set(id, b);
+
+  for (const [npcId, npc] of b.npcs) {
+    markers.set(npcId, labels.attach(npc.object, { y: NPC_TOP[npcId], className: 'marker' }));
+    const tag = labels.attach(npc.object, { y: NPC_TOP[npcId] - 0.3, className: 'nametag', html: npc.name });
     tag.show(false);
-    return [npc, tag];
-  }),
-);
+    nameTags.set(npc, tag);
+    const es = state.enemies[npcId];
+    if (es?.defeated) {
+      npc.object.visible = false;
+      b.occupied.delete(`${npc.cell.gx},${npc.cell.gz}`);
+    }
+  }
+  const crab = b.npcs.get('crab');
+  if (crab) {
+    crab.setAsleep(true);
+    crab.setLens(state.quests.lens === 'none' || state.quests.lens === 'active');
+  }
+  for (const ex of b.exits) {
+    labels.attach(ex.anchor, { y: 0, className: 'exit-label', html: `${ARROWS[ex.side]} ${BOARDS[ex.to].name}` });
+  }
+  return b;
+}
+
+let board = getBoard(state.board);
+board.group.visible = true;
+
+const hero = createHero();
+const start = BOARDS[state.board].start;
+hero.place({ gx: start[0], gz: start[1] }, board.worldPos(start[0], start[1]));
+scene.add(hero.object);
+controls.target.copy(hero.object.position).setY(0);
 
 // ---------------- Game glue ----------------
 let locked = false;
+let transitioning = false;
+let guidance = '';
 const v3 = new Vector3();
-const popupHero = (text, cls) => labels.popup(v3.copy(hero.object.position).setY(hero.object.position.y + 1.05), text, cls);
-const popupBoss = (text, cls) => labels.popup(v3.copy(boss.object.position).setY(boss.object.position.y + 1.7), text, cls);
+
+const popupAt = (obj, y, text, cls) => labels.popup(obj.getWorldPosition(new Vector3()).add({ x: 0, y, z: 0 }), text, cls);
+const popupHero = (text, cls) => popupAt(hero.object, 1.05, text, cls);
+const popupNpc = (npc, text, cls) => popupAt(npc.object, NPC_TOP[npc.id] - 0.2, text, cls);
 
 const hud = createHUD({
   onDrink() {
-    if (state.potions <= 0 || state.hp >= state.maxHp) return;
+    if (state.potions <= 0 || state.hp >= maxHp(state)) return;
     state.potions -= 1;
-    state.hp = Math.min(state.maxHp, state.hp + 2);
+    state.hp = Math.min(maxHp(state), state.hp + 2);
     popupHero('+2 ♥', 'heal');
+    changed();
+  },
+  onTrack(id) {
+    state.tracked = state.tracked === id ? null : id;
     changed();
   },
 });
 
+function refreshMarkers() {
+  const q = state.quests;
+  const set = (id, html, cls) => {
+    const m = markers.get(id);
+    if (!m) return;
+    m.show(!!html);
+    if (html) {
+      m.set(html);
+      m.el.className = `label marker ${cls}`;
+    }
+  };
+  const giver = (stage) => (stage === 'none' ? ['!', 'quest'] : stage === 'ready' ? ['?', 'quest'] : [null]);
+  set('pip', '<i class="coin"></i>', 'shop');
+  set('bess', '<i class="coin"></i>', 'shop');
+  set('bramble', ...giver(q.troll));
+  set('marla', ...giver(q.lens));
+  const t = state.enemies.troll;
+  set('troll', !t.defeated && q.troll !== 'complete' ? '☠' : null, 'boss');
+  const c = state.enemies.crab;
+  if (c.sneaked && !c.defeated) set('crab', 'Zzz', 'sleep');
+  else set('crab', !c.defeated && q.lens !== 'ready' && q.lens !== 'complete' ? '☠' : null, 'boss');
+}
+
 function changed() {
-  hud.render(state);
-  hero.setGear({ swordLevel: swordLevel(state), armour: state.armour });
-  const q = state.quest;
-  markers.guard.show(q === 'none' || q === 'bossDefeated');
-  markers.guard.set(q === 'bossDefeated' ? '?' : '!');
-  markers.boss.show(q === 'none' || q === 'accepted');
+  autoTrack(state);
+  hero.setGear({ swordLevel: swordLevel(state), armour: state.gear.tinPlate || state.gear.coralMail, boots: state.gear.boots });
+  boards.get('gullhaven')?.props.lighthouse?.userData.setLit(state.quests.lens === 'complete');
+  refreshMarkers();
+  updateWaypoint(true);
+  hud.render(state, { boardName: board.def.name, guidance });
 }
 
 const ctx = {
   state,
   dialog,
   hero,
-  boss,
   dice,
   changed,
   popupHero,
-  popupBoss,
+  popupNpc,
   lock: (v) => { locked = v; },
-  groundY: (p) => heightAt(Math.round(p.x), Math.round(p.z)),
-  respawn: () => hero.place(START, world.worldPos(START.gx, START.gz)),
-  onBossDefeated: () => world.occupied.delete(key(BOSS_CELL.gx, BOSS_CELL.gz)),
+  enemy: (id) => board.npcs.get(id),
+  groundY: (p) => board.worldPos(...Object.values(board.cellFromWorld(p))).y,
+  onEnemyDefeated(id) {
+    for (const b of boards.values()) {
+      const npc = b.npcs.get(id);
+      if (npc) b.occupied.delete(`${npc.cell.gx},${npc.cell.gz}`);
+    }
+  },
+  async respawn(boardId, cell) {
+    if (boardId === board.id) {
+      hero.place(cell, board.worldPos(cell.gx, cell.gz));
+      return;
+    }
+    await switchBoard(getBoard(boardId), cell, new Vector3(0, 0, -1));
+  },
 };
 const talk = createTalk(ctx);
-const fight = createFight(ctx);
+const encounters = createEncounters(ctx);
 
 function interact(occ) {
-  hero.faceTowards(occ.npc.object.position);
-  occ.npc.faceTowards(hero.object.position);
-  if (occ.kind === 'merchant') talk.merchant();
-  else if (occ.kind === 'guard') talk.guard();
-  else if (occ.kind === 'boss') fight.start();
+  hero.faceTowards(occ.npc.object.getWorldPosition(v3));
+  occ.npc.faceTowards(hero.object.position.clone().sub(board.group.position));
+  if (ENEMIES[occ.id]) encounters.start(occ.id);
+  else talk.open(occ.id);
 }
 
-hero.onStep = (cell) => {
-  const coin = world.collectCoin(cell.gx, cell.gz);
-  if (coin) {
-    state.gold += coin;
-    popupHero(`+${coin}g`, 'gold');
-    changed();
-  }
-};
-
+// ---------------- Movement ----------------
 const adjacent = (a, b) => Math.abs(a.gx - b.gx) + Math.abs(a.gz - b.gz) === 1;
-const toSteps = (cells) => cells.map((c) => ({ ...c, pos: world.worldPos(c.gx, c.gz) }));
+const toSteps = (cells) => cells.map((c) => ({ ...c, pos: board.worldPos(c.gx, c.gz) }));
+/** Exit tiles only count as walkable when they are the destination. */
+const blockedFor = (goal) => (x, z) =>
+  board.isBlocked(x, z) || (!!board.exitAt(x, z) && !(goal && goal.gx === x && goal.gz === z));
 
-/** Click-to-move: path to a tile, or next to a character and talk. */
 function goTo(gx, gz) {
   if (locked) return;
   const target = { gx, gz };
-  const occ = world.occupantAt(gx, gz);
+  const occ = board.occupantAt(gx, gz);
   if (occ?.npc) {
     if (adjacent(hero.cell, target) && !hero.isMoving) return interact(occ);
-    const path = findPath(hero.cell, target, (x, z) => adjacent({ gx: x, gz: z }, target), world.isBlocked);
+    const path = findPath(hero.cell, target, (x, z) => adjacent({ gx: x, gz: z }, target), blockedFor(null));
     if (!path) return;
     dialog.hide();
     hero.moveAlong(toSteps(path), () => interact(occ));
     return;
   }
-  if (world.isBlocked(gx, gz)) return;
-  const path = findPath(hero.cell, target, (x, z) => x === gx && z === gz, world.isBlocked);
+  if (board.isBlocked(gx, gz)) return;
+  const path = findPath(hero.cell, target, (x, z) => x === gx && z === gz, blockedFor(target));
   if (!path) return;
   dialog.hide();
   hero.moveAlong(toSteps(path));
+}
+
+hero.onStep = (cell) => {
+  const coin = board.collectCoin(cell.gx, cell.gz);
+  if (coin) {
+    state.gold += coin;
+    popupHero(`+${coin}g`, 'gold');
+    changed();
+  }
+  const exit = board.exitAt(cell.gx, cell.gz);
+  if (exit && !transitioning) {
+    hero.stop();
+    travel(exit, cell);
+  }
+};
+
+// ---------------- Board switching ----------------
+async function travel(exit, fromCell) {
+  const to = getBoard(exit.to);
+  const back = to.exits.find((e) => e.to === board.id);
+  const idx = Math.max(0, exit.cells.findIndex(([x, z]) => x === fromCell.gx && z === fromCell.gz));
+  const [ax, az] = back.cells[Math.min(idx, back.cells.length - 1)];
+  const arrival = { gx: ax - back.dir.x, gz: az - back.dir.z }; // one step inward
+  await switchBoard(to, arrival, exit.dir);
+}
+
+/**
+ * Lift the hero, slide the old board away and the new one in underneath,
+ * then set the hero down on `arrival`.
+ */
+async function switchBoard(to, arrival, dir) {
+  transitioning = true;
+  locked = true;
+  dialog.hide();
+  hoverRing.visible = false;
+  waypoint.hide();
+  const from = board;
+  const P = hero.object.position.clone();
+  const local = to.localPos(arrival.gx, arrival.gz);
+  const finalOff = new Vector3(P.x - local.x, 0, P.z - local.z);
+  const span = Math.max(to.W, to.H, from.W, from.H) + 10;
+  const startOff = finalOff.clone().addScaledVector(dir, span);
+  to.group.position.copy(startOff);
+  to.group.visible = true;
+  banner.show(to.def.name, to.def.subtitle);
+
+  const fromStart = from.group.position.clone();
+  const lift = 1.0;
+  await tween(0.3, (t) => { hero.object.position.y = P.y + t * lift; }, ease.outCubic);
+  await tween(1.2, (t) => {
+    from.group.position.copy(fromStart).addScaledVector(dir, -span * t);
+    to.group.position.lerpVectors(startOff, finalOff, t);
+  }, ease.inOut);
+  from.group.visible = false;
+
+  board = to;
+  state.board = to.id;
+  const ground = to.worldPos(arrival.gx, arrival.gz);
+  hero.place(arrival, ground.clone().setY(ground.y + lift));
+  await tween(0.28, (t) => { hero.object.position.y = ground.y + (1 - t * t) * lift; });
+  hero.object.position.y = ground.y;
+  hero.land();
+  table.recenter(finalOff.x + to.W / 2, finalOff.z + to.H / 2);
+
+  transitioning = false;
+  locked = false;
+  changed();
+}
+
+// ---------------- Waypoint ----------------
+let wpKey = '';
+function updateWaypoint(force = false) {
+  if (transitioning) return;
+  const obj = objective(state);
+  const k = `${board.id}|${hero.cell.gx},${hero.cell.gz}|${state.tracked}|${obj?.board}|${obj?.npc}`;
+  if (!force && k === wpKey) return;
+  wpKey = k;
+  const prevGuidance = guidance;
+  guidance = '';
+  if (!obj) {
+    waypoint.hide();
+  } else if (obj.board === board.id) {
+    const npc = board.npcs.get(obj.npc);
+    const goal = npc.cell;
+    const path = findPath(hero.cell, goal, (x, z) => adjacent({ gx: x, gz: z }, goal), blockedFor(null)) ?? [];
+    const pts = [hero.cell, ...path].map((c) => board.worldPos(c.gx, c.gz));
+    waypoint.set(pts, board.worldPos(goal.gx, goal.gz), NPC_TOP[obj.npc] + 0.55);
+    guidance = `Find ${npc.name} here`;
+  } else {
+    const hint = routeHint(board.id, obj);
+    if (hint) {
+      const exit = board.exits.find((e) => e.to === hint.next);
+      const cells = exit.cells.map(([gx, gz]) => ({ gx, gz }));
+      cells.sort((a, b) => (Math.abs(a.gx - hero.cell.gx) + Math.abs(a.gz - hero.cell.gz)) - (Math.abs(b.gx - hero.cell.gx) + Math.abs(b.gz - hero.cell.gz)));
+      const goal = cells[0];
+      const path = findPath(hero.cell, goal, (x, z) => x === goal.gx && z === goal.gz, blockedFor(goal)) ?? [];
+      const pts = [hero.cell, ...path].map((c) => board.worldPos(c.gx, c.gz));
+      waypoint.set(pts, board.worldPos(goal.gx, goal.gz), 1.2);
+      guidance = `Take the ${exit.side} road to ${hint.nextName}${hint.next !== obj.board ? `, then on to ${hint.finalName}` : ''}`;
+    }
+  }
+  if (guidance !== prevGuidance && !force) hud.render(state, { boardName: board.def.name, guidance });
 }
 
 // ---------------- Pointer ----------------
@@ -185,38 +352,41 @@ scene.add(hoverRing);
 const raycaster = new Raycaster();
 const pointer = new Vector2();
 const ground = new Plane(new Vector3(0, 1, 0), 0);
-const npcObjects = [merchant.object, guard.object, boss.object];
 let hoveredTag = null;
 let downAt = null;
 
 function pickCell(e) {
   pointer.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
-  const hit = raycaster.intersectObjects(npcObjects.filter((o) => o.visible), true)[0];
+  const npcObjects = [...board.npcs.values()].map((n) => n.object).filter((o) => o.visible);
+  const hit = raycaster.intersectObjects(npcObjects, true)[0];
   if (hit) {
     let o = hit.object;
     while (o.parent && !npcObjects.includes(o)) o = o.parent;
-    return { gx: Math.round(o.position.x), gz: Math.round(o.position.z) };
+    const npc = [...board.npcs.values()].find((n) => n.object === o);
+    if (npc) return { ...npc.cell };
   }
   const p = raycaster.ray.intersectPlane(ground, v3);
-  return p ? { gx: Math.round(p.x), gz: Math.round(p.z) } : null;
+  return p ? board.cellFromWorld(p) : null;
 }
 
 renderer.domElement.addEventListener('pointermove', (e) => {
-  const c = pickCell(e);
   hoveredTag?.show(false);
   hoveredTag = null;
-  if (!c) { hoverRing.visible = false; return; }
-  const occ = world.occupantAt(c.gx, c.gz);
-  const blocked = world.isBlocked(c.gx, c.gz);
+  if (transitioning) return;
+  const c = pickCell(e);
+  if (!c || !board.cellAt(c.gx, c.gz)) { hoverRing.visible = false; return; }
+  const occ = board.occupantAt(c.gx, c.gz);
+  const exit = board.exitAt(c.gx, c.gz);
+  const blocked = board.isBlocked(c.gx, c.gz);
   hoverRing.visible = !blocked || !!occ?.npc;
-  hoverRing.material.color.set(occ?.npc ? (occ.kind === 'boss' ? '#ff6a5a' : '#7fe0ff') : '#ffd76a');
-  hoverRing.position.set(c.gx, heightAt(c.gx, c.gz) + 0.006, c.gz);
+  hoverRing.material.color.set(occ?.npc ? (ENEMIES[occ.id] ? '#ff6a5a' : '#7fe0ff') : exit ? '#ffffff' : '#ffd76a');
+  board.worldPos(c.gx, c.gz, hoverRing.position).y += 0.006;
   if (occ?.npc) {
     hoveredTag = nameTags.get(occ.npc);
     hoveredTag?.show(true);
   }
-  renderer.domElement.style.cursor = occ?.npc ? 'pointer' : blocked ? 'not-allowed' : 'pointer';
+  renderer.domElement.style.cursor = blocked && !occ?.npc ? 'not-allowed' : 'pointer';
 });
 renderer.domElement.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY }; });
 renderer.domElement.addEventListener('pointerup', (e) => {
@@ -245,11 +415,11 @@ function keyboardStep(dt) {
   const dir = held.has('f') ? fwd : held.has('b') ? { x: -fwd.x, z: -fwd.z }
     : held.has('r') ? right : { x: -right.x, z: -right.z };
   const t = { gx: hero.cell.gx + dir.x, gz: hero.cell.gz + dir.z };
-  const occ = world.occupantAt(t.gx, t.gz);
+  const occ = board.occupantAt(t.gx, t.gz);
   if (occ?.npc) {
     held.clear();
     interact(occ);
-  } else if (world.isBlocked(t.gx, t.gz)) {
+  } else if (board.isBlocked(t.gx, t.gz)) {
     if (bumpCooldown <= 0) { hero.bump(dir); bumpCooldown = 0.3; }
   } else {
     dialog.hide();
@@ -269,13 +439,15 @@ window.addEventListener('resize', () => {
 
 // ---------------- Start ----------------
 createDebugUI({ fx, hero });
+table.recenter(board.W / 2, board.H / 2);
 changed();
+banner.show(board.def.name, board.def.subtitle);
 dialog.show({
-  name: 'Welcome to Thimblecross',
+  name: 'Welcome, adventurer',
   color: '#c8962a',
-  text: 'Click a tile or use <b>WASD</b> to hop around. Click a character to talk.<br>' +
-    'The guard with the <b>!</b> has work for you, and Pip the Peddler sells upgrades for gold. ' +
-    'Pick up coins as you explore!',
+  text: 'Click a tile or use <b>WASD</b> to hop around, and click a character to talk. ' +
+    'Glowing arrows at the board\'s edge lead to <b>new boards</b>.<br>' +
+    'Look for a <b>!</b> to find quests. Once you accept one, a <b>golden trail</b> guides you.',
   choices: [{ label: "Let's go!", onSelect: () => dialog.hide() }],
 });
 
@@ -289,17 +461,21 @@ renderer.setAnimationLoop(() => {
   updateTweens(dt);
   keyboardStep(dt);
   hero.update(dt);
-  merchant.update(dt);
-  guard.update(dt);
-  boss.update(dt);
+  for (const b of boards.values()) {
+    if (!b.group.visible) continue;
+    b.animate(dt);
+    for (const npc of b.npcs.values()) npc.update(dt);
+  }
   dice.update(dt);
-  world.update(hero.cell);
-  world.animate(dt);
+  updateWaypoint();
+  waypoint.update(dt);
 
-  // Camera + shadow light follow the hero.
-  follow.copy(hero.object.position).setY(0).sub(controls.target).multiplyScalar(Math.min(1, dt * 4));
-  controls.target.add(follow);
-  camera.position.add(follow);
+  // Camera + shadow light follow the hero (but hold still while boards swap).
+  if (!transitioning) {
+    follow.copy(hero.object.position).setY(0).sub(controls.target).multiplyScalar(Math.min(1, dt * 4));
+    controls.target.add(follow);
+    camera.position.add(follow);
+  }
   controls.update();
   lights.key.position.copy(controls.target).add(keyOffset);
   lights.key.target.position.copy(controls.target);

@@ -2,6 +2,11 @@ import { Vector3 } from 'three';
 import { tween, ease } from '../core/anim.js';
 
 /** HTML labels pinned to 3D objects (markers, name tags) and floating popups. */
+function shown(o) {
+  for (; o; o = o.parent) if (!o.visible) return false;
+  return true;
+}
+
 export function createLabels(camera) {
   const layer = document.createElement('div');
   layer.className = 'label-layer';
@@ -52,7 +57,7 @@ export function createLabels(camera) {
 
     update() {
       for (const it of items) {
-        if (!it.visible || !it.object.visible) { it.el.style.display = 'none'; continue; }
+        if (!it.visible || !shown(it.object)) { it.el.style.display = 'none'; continue; }
         it.object.getWorldPosition(v);
         v.y += it.y;
         place(it.el, v);

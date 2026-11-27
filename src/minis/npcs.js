@@ -136,19 +136,119 @@ export function createGuard() {
   return { object: root, name: 'Sergeant Bramble', ...idle };
 }
 
-/** Wooden signpost pointing north. */
-export function createSignpost() {
+function fish(color = '#8fb8d8') {
   const g = new Group();
-  const post = new Mesh(new CylinderGeometry(0.035, 0.04, 0.7, 8), paint('#7a5232'));
-  post.position.y = 0.35;
-  const board = new Mesh(new BoxGeometry(0.42, 0.13, 0.03), paint('#b98a55'));
-  board.position.set(0, 0.58, 0);
-  board.rotation.y = Math.PI / 2;
-  const arrow = new Mesh(new ConeGeometry(0.08, 0.1, 3), paint('#b98a55'));
-  arrow.rotation.set(-Math.PI / 2, 0, 0);
-  arrow.position.set(0, 0.58, -0.25);
-  const skull = new Mesh(new SphereGeometry(0.045, 10, 8), paint('#efe6d2'));
-  skull.position.set(0.02, 0.58, 0.02);
-  g.add(post, board, arrow, skull);
-  return castAll(g);
+  const body = new Mesh(new SphereGeometry(0.06, 12, 8), paint(color, { roughness: 0.4 }));
+  body.scale.set(0.5, 0.9, 1.9);
+  const tail = new Mesh(new ConeGeometry(0.05, 0.07, 4), paint(color));
+  tail.rotation.x = -Math.PI / 2;
+  tail.scale.set(0.3, 1, 1);
+  tail.position.z = -0.13;
+  const eye = new Mesh(new SphereGeometry(0.012, 6, 4), paint('#111'));
+  eye.position.set(0.028, 0.015, 0.07);
+  g.add(body, tail, eye);
+  return g;
+}
+
+/** Barnacle Bess: fishmonger with a bandana, apron and a fish held high. */
+export function createFishmonger() {
+  const m = chibiMaterials({
+    skin: '#e8a882', hair: '#d0602a', tunic: '#3a7ab8', metal: '#c8c8c8',
+    accent: '#e8b63d', leather: '#5a3a24', boots: '#2a3a4a',
+  });
+  const root = new Group();
+  root.name = 'fishmonger';
+  root.add(createBase({ seed: 41, grass: '#d8c08a' }));
+  const { figure, head, right, left, R, onHead } = buildChibi(m);
+  root.add(figure);
+
+  // Bandana + knot
+  const bandMat = paint('#d6473b');
+  const band = new Mesh(new SphereGeometry(R * 1.08, 28, 12, 0, Math.PI * 2, 0, Math.PI * 0.4), bandMat);
+  band.rotation.x = -0.35;
+  const knot = new Mesh(new SphereGeometry(0.04, 10, 8), bandMat);
+  knot.position.set(0, R * 0.55, -R * 0.95);
+  const tails = new Mesh(new ConeGeometry(0.03, 0.1, 4), bandMat);
+  tails.position.set(0.03, R * 0.4, -R * 1.02);
+  tails.rotation.set(0.6, 0, 0.4);
+  head.add(band, knot, tails);
+  // Pigtails
+  for (const side of [-1, 1]) {
+    const tail = new Mesh(new SphereGeometry(0.06, 10, 8), m.hair);
+    tail.scale.set(0.8, 1.3, 0.8);
+    tail.position.set(side * R * 0.95, -0.06, -0.06);
+    head.add(tail);
+  }
+  // Apron
+  const apron = new Mesh(new BoxGeometry(0.2, 0.26, 0.02), paint('#f4f0e8'));
+  apron.position.set(0, 0.26, 0.11);
+  figure.add(apron);
+
+  right.arm.rotation.set(-2.4, 0, -0.15);
+  const held = fish('#7fb0d0');
+  held.rotation.set(Math.PI / 2, 0, 0);
+  held.position.y = -0.02;
+  right.hand.add(held);
+  left.arm.rotation.set(-0.2, 0, 0.5);
+
+  castAll(root);
+  const idle = createIdle(root, figure, head);
+  return { object: root, name: 'Barnacle Bess', ...idle };
+}
+
+/** Old Marla: lighthouse keeper in a yellow raincoat and sou'wester, holding a lantern. */
+export function createKeeper() {
+  const m = chibiMaterials({
+    skin: '#f0c8a8', hair: '#d8d4d0', tunic: '#f0c23a', metal: '#c8c8c8',
+    accent: '#3a3330', leather: '#3a3330', boots: '#2a3a4a',
+  });
+  const root = new Group();
+  root.name = 'keeper';
+  root.add(createBase({ seed: 51, grass: '#d8c08a' }));
+  const { figure, head, right, left, R, onHead } = buildChibi(m);
+  root.add(figure);
+
+  // Sou'wester hat: dome + sloped wide brim
+  const hatMat = paint('#f0c23a');
+  const dome = new Mesh(new SphereGeometry(R * 1.1, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.45), hatMat);
+  dome.rotation.x = -0.25;
+  const brim = new Mesh(new CylinderGeometry(R * 1.35, R * 1.6, 0.05, 24, 1, true), paint('#f0c23a', { side: 2 }));
+  brim.position.set(0, R * 0.25, -0.03);
+  brim.rotation.x = -0.25;
+  head.add(dome, brim);
+  // Bun
+  const bun = new Mesh(new SphereGeometry(0.07, 12, 10), m.hair);
+  bun.position.set(0, R * 0.2, -R * 1.05);
+  head.add(bun);
+  // Round glasses
+  for (const side of [-1, 1]) {
+    const lens = new Mesh(new TorusGeometry(0.04, 0.006, 6, 16), paint('#3a3330'));
+    lens.position.copy(onHead(side * 0.42, -0.08, 1, 1.04));
+    lens.lookAt(lens.position.clone().multiplyScalar(2));
+    head.add(lens);
+  }
+  // Raincoat buttons
+  for (const y of [0.24, 0.32, 0.4]) {
+    const b = new Mesh(new SphereGeometry(0.012, 6, 4), paint('#3a3330'));
+    b.position.set(0, y, 0.115);
+    figure.add(b);
+  }
+
+  // Lantern
+  right.arm.rotation.set(-0.9, 0, -0.25);
+  const lantern = new Group();
+  const frame = new Mesh(new BoxGeometry(0.08, 0.1, 0.08), paint('#3a3330'));
+  frame.position.y = -0.07;
+  const glow = new Mesh(new BoxGeometry(0.065, 0.085, 0.065), paint('#ffd36a', { emissive: '#ffb84a', emissiveIntensity: 1.2 }));
+  glow.position.y = -0.07;
+  const handle = new Mesh(new TorusGeometry(0.03, 0.006, 4, 10, Math.PI), paint('#3a3330'));
+  handle.position.y = -0.015;
+  lantern.add(frame, glow, handle);
+  lantern.rotation.x = 0.9;
+  right.hand.add(lantern);
+  left.arm.rotation.set(-0.1, 0, 0.3);
+
+  castAll(root);
+  const idle = createIdle(root, figure, head);
+  return { object: root, name: 'Old Marla', ...idle };
 }
